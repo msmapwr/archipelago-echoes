@@ -154,7 +154,7 @@ horizontal_scroll_mode = 0
 [node name="Details" type="VBoxContainer" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll"]
 layout_mode = 2
 size_flags_horizontal = 3
-theme_override_constants/separation = 6
+theme_override_constants/separation = 3
 
 [node name="MissionStatus" type="Label" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details"]
 layout_mode = 2

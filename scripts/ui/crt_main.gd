@@ -223,7 +223,7 @@ func _refresh_contact() -> void:
 		if GameManager.mode == "cockpit" or GameManager.mode == "returning":
 			contact_details.text = "方位 %03d° · 距离 %.1f km · %s" % [roundi(MissionController.last_contact_bearing_degrees), MissionController.last_contact_range_km, "已确认" if GameManager.target_identified else "待确认"]
 		else:
-			contact_details.text = "方位 %03d°   距离 %.1f km   信号：%s\n观测 T+%02d:%02d   识别：%s" % [roundi(MissionController.last_contact_bearing_degrees), MissionController.last_contact_range_km, "稳定" if MissionController.contact_visible else "中断", floori(float(seen) / 60.0), seen % 60, "已确认" if GameManager.target_identified else "待确认"]
+			contact_details.text = "方位 %03d°   距离 %.1f km   观测 T+%02d:%02d   %s" % [roundi(MissionController.last_contact_bearing_degrees), MissionController.last_contact_range_km, floori(float(seen) / 60.0), seen % 60, "稳定" if MissionController.contact_visible else "中断"]
 	selection_details.text = "已选择 A1 · 可下达识别或开火命令" if selected_contact_id == MissionController.CONTACT_ID else "未选择接触 · 点击雷达回波"
 
 func _refresh_ship() -> void:
