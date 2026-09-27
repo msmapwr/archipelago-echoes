@@ -113,9 +113,14 @@ size_flags_horizontal = 3
 text = "运行中 · 空格暂停"
 theme_override_colors/font_color = Color(0.52, 0.93, 0.82, 1)
 
+[node name="TimeStatus" type="Label" parent="Footer"]
+layout_mode = 2
+text = "T+00:00"
+theme_override_colors/font_color = Color(0.52, 0.93, 0.82, 1)
+
 [node name="Help" type="Label" parent="Footer"]
 layout_mode = 2
-text = "点击标记选择   |   Esc 取消选择"
+text = "岛屿为占位地形   |   点击标记选择   |   Esc 取消选择"
 theme_override_colors/font_color = Color(0.58, 0.75, 0.72, 1)
 
 [node name="SweepTimer" type="Timer" parent="."]

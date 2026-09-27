@@ -1,24 +1,25 @@
 # 雷达指挥官：群岛空海战
 
-Godot 4.x 游戏项目，当前已完成 P0 工程、状态与数据骨架，以及可交互雷达样例。玩法方向与开发阶段见 [项目总计划](docs/plan.md) 和 [详细开发计划](docs/development-plan.md)。P0 规则及状态见 [决策记录](docs/decisions/2026-09-27-p0-rules.md) 和 [状态流程](docs/p0-state-flow.md)。
+Godot 4.7.2 游戏项目，当前已完成 P0 工程、状态与数据骨架、可交互雷达样例，以及 P1.1 的固定种子地图和世界时钟。玩法方向与开发阶段见 [项目总计划](docs/plan.md) 和 [详细开发计划](docs/development-plan.md)。P0 规则及状态见 [决策记录](docs/decisions/2026-09-27-p0-rules.md) 和 [状态流程](docs/p0-state-flow.md)；地图规则见 [P1.1 说明](docs/p1-world.md)。
 
 ## 打开项目
 
-1. 安装 Godot 4.x 标准版。
-2. 在 Godot 项目管理器中导入 `radar-commander/project.godot`。
-3. 打开工程后运行主场景。点击雷达标记选择接触，按 Esc 取消，按空格暂停或继续；点击“下一次扫描”查看接触更新和失联。当前是模拟接触样例，海空战斗尚未实现。
+1. 使用 Godot 4.7.2 标准版。
+2. 在 Godot 项目管理器中导入仓库根目录的 `project.godot`。
+3. 打开工程后运行主场景。点击雷达标记选择接触，按 Esc 取消，按空格暂停或继续；点击“下一次扫描”查看接触更新和失联。雷达会显示占位岛屿，底部会显示模拟时间。当前接触仍为模拟数据，海空战斗尚未实现。
 
 命令行可用时，在仓库根目录运行：
 
 ```powershell
-godot --headless --path radar-commander --editor --quit
-godot --headless --path radar-commander --quit-after 1
-godot --headless --path radar-commander --script res://tests/p0_smoke.gd --log-file p0-test.log
+godot --headless --path . --editor --quit
+godot --headless --path . --quit-after 1
+godot --headless --path . --script res://tests/p0_smoke.gd --log-file p0-test.log
+godot --headless --path . --script res://tests/p1_world_smoke.gd
 ```
 
 ## 目录
 
-- `radar-commander/`：Godot 工程、场景、脚本、数据与资源。
+- 仓库根目录：Godot 工程、场景、脚本、数据与资源。
 - `docs/`：玩法、开发和决策文档。
 - `AGENTS.md`：本项目开发规范。
 

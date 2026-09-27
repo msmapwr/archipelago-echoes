@@ -6,10 +6,12 @@ extends Control
 @onready var selection_details: Label = $Content/Details/SelectionDetails
 @onready var event_details: Label = $Content/Details/EventDetails
 @onready var pause_status: Label = $Footer/PauseStatus
+@onready var time_status: Label = $Footer/TimeStatus
 @onready var sweep_timer: Timer = $SweepTimer
 
 var contact: ContactDefinition
 var sweep_phase: int = 0
+var displayed_second: int = -1
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -22,8 +24,22 @@ func _ready() -> void:
 	radar.contact_selected.connect(_on_contact_selected)
 	radar.contact_deselected.connect(_on_contact_deselected)
 	EventBus.event_recorded.connect(_on_event_recorded)
+	if WorldState.map == null:
+		contact_status.text = "场景加载失败"
+		contact_details.text = "请查看 Godot 输出中的 WorldState 错误。"
+		sweep_timer.stop()
+		return
+	radar.set_land_areas(WorldState.map.islands, WorldState.ship_position_km)
+	WorldClock.time_advanced.connect(_on_world_time_advanced)
 	_show_sweep_phase()
 	_update_pause_status()
+	_on_world_time_advanced(WorldClock.elapsed_seconds)
+
+func _on_world_time_advanced(total_seconds: float) -> void:
+	var current_second := floori(total_seconds)
+	if current_second != displayed_second:
+		displayed_second = current_second
+		time_status.text = WorldClock.formatted_time()
 
 func _input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):

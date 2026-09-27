@@ -1,6 +1,6 @@
 # Godot 4 generated files
-radar-commander/.godot/
-radar-commander/*.translation
+/.godot/
+*.translation
 
 # Local editor and OS files
 .vscode/
@@ -12,7 +12,6 @@ Thumbs.db
 .env
 .env.*
 !.env.example
-radar-commander/build/
-radar-commander/exports/
-radar-commander/p0-test.log
+/build/
+/exports/
 p0-test.log

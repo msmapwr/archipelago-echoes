@@ -7,12 +7,21 @@ const MAX_RANGE_KM := 25.0
 const GRID_COLOR := Color("28565b")
 const RADAR_COLOR := Color("55dbbd")
 const SELECTED_COLOR := Color("ffe4a3")
+const LAND_COLOR := Color("245357")
+const SHORE_COLOR := Color("60968c")
 
 var contact_id: String = ""
 var contact_visible: bool = false
 var contact_selected_state: bool = false
 var bearing_degrees: float = 0.0
 var range_km: float = 0.0
+var land_areas: Array[Dictionary] = []
+var own_position_km: Vector2 = Vector2.ZERO
+
+func set_land_areas(areas: Array[Dictionary], position_km: Vector2) -> void:
+	land_areas = areas.duplicate(true)
+	own_position_km = position_km
+	queue_redraw()
 
 func set_contact(id: String, bearing: float, distance: float, visible: bool) -> void:
 	contact_id = id
@@ -44,6 +53,15 @@ func _draw() -> void:
 	var center := size * 0.5
 	var radius := minf(size.x, size.y) * 0.43
 	draw_circle(center, radius, Color("08252a"))
+	for island in land_areas:
+		var offset_km: Vector2 = island["center"] - own_position_km
+		var island_radius_km: float = island["radius_km"]
+		if offset_km.length() + island_radius_km > MAX_RANGE_KM:
+			continue
+		var point := center + offset_km * radius / MAX_RANGE_KM
+		var island_radius := island_radius_km * radius / MAX_RANGE_KM
+		draw_circle(point, island_radius, LAND_COLOR)
+		draw_arc(point, island_radius, 0.0, TAU, 48, SHORE_COLOR, 1.0, true)
 	for ring in range(1, 5):
 		draw_arc(center, radius * float(ring) / 4.0, 0.0, TAU, 96, GRID_COLOR, 1.0, true)
 	draw_line(center + Vector2(-radius, 0), center + Vector2(radius, 0), GRID_COLOR, 1.0)
