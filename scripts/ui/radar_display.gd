@@ -4,11 +4,12 @@ signal contact_selected(contact_id: String)
 signal contact_deselected
 
 const MAX_RANGE_KM := 25.0
-const GRID_COLOR := Color("28565b")
-const RADAR_COLOR := Color("55dbbd")
-const SELECTED_COLOR := Color("ffe4a3")
-const LAND_COLOR := Color("245357")
-const SHORE_COLOR := Color("60968c")
+const GRID_COLOR := Color("315648")
+const RADAR_COLOR := Color("8be6a3")
+const SELECTED_COLOR := Color("e8af58")
+const OWN_SHIP_COLOR := Color("65b5e8")
+const LAND_COLOR := Color("304d43")
+const SHORE_COLOR := Color("83a48a")
 
 var contact_id: String = ""
 var contact_visible: bool = false
@@ -17,18 +18,23 @@ var bearing_degrees: float = 0.0
 var range_km: float = 0.0
 var land_areas: Array[Dictionary] = []
 var own_position_km: Vector2 = Vector2.ZERO
+var own_heading_degrees: float = 0.0
 
 func set_land_areas(areas: Array[Dictionary], position_km: Vector2) -> void:
 	land_areas = areas.duplicate(true)
 	own_position_km = position_km
 	queue_redraw()
 
+func set_ship_heading(heading_degrees: float) -> void:
+	own_heading_degrees = heading_degrees
+	queue_redraw()
+
 func set_contact(id: String, bearing: float, distance: float, visible: bool) -> void:
 	contact_id = id
 	bearing_degrees = bearing
 	range_km = distance
-	contact_visible = visible
-	if not visible and contact_selected_state:
+	contact_visible = visible and distance <= MAX_RANGE_KM
+	if not contact_visible and contact_selected_state:
 		clear_selection()
 	queue_redraw()
 
@@ -52,7 +58,7 @@ func _gui_input(event: InputEvent) -> void:
 func _draw() -> void:
 	var center := size * 0.5
 	var radius := minf(size.x, size.y) * 0.43
-	draw_circle(center, radius, Color("08252a"))
+	draw_circle(center, radius, Color("08110e"))
 	for island in land_areas:
 		var offset_km: Vector2 = island["center"] - own_position_km
 		var island_radius_km: float = island["radius_km"]
@@ -66,9 +72,17 @@ func _draw() -> void:
 		draw_arc(center, radius * float(ring) / 4.0, 0.0, TAU, 96, GRID_COLOR, 1.0, true)
 	draw_line(center + Vector2(-radius, 0), center + Vector2(radius, 0), GRID_COLOR, 1.0)
 	draw_line(center + Vector2(0, -radius), center + Vector2(0, radius), GRID_COLOR, 1.0)
-	draw_circle(center, 5.0, RADAR_COLOR)
+	for tick in range(0, 360, 30):
+		var direction := Vector2(sin(deg_to_rad(float(tick))), -cos(deg_to_rad(float(tick))))
+		draw_line(center + direction * (radius - 9.0), center + direction * radius, GRID_COLOR, 2.0, true)
+	var own_direction := Vector2(sin(deg_to_rad(own_heading_degrees)), -cos(deg_to_rad(own_heading_degrees)))
+	draw_line(center + own_direction * 11.0, center + own_direction * 30.0, OWN_SHIP_COLOR, 3.0, true)
+	draw_circle(center, 5.0, OWN_SHIP_COLOR)
 	var font := ThemeDB.fallback_font
 	draw_string(font, center + Vector2(-10, -radius - 12), "N", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, RADAR_COLOR)
+	draw_string(font, center + Vector2(radius + 8, 5), "E", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, GRID_COLOR)
+	draw_string(font, center + Vector2(-8, radius + 20), "S", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, GRID_COLOR)
+	draw_string(font, center + Vector2(-radius - 22, 5), "W", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, GRID_COLOR)
 	draw_string(font, center + Vector2(radius - 43, radius + 23), "25 km", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, GRID_COLOR)
 	if contact_visible:
 		var point := _contact_position()
