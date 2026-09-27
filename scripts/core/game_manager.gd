@@ -21,6 +21,19 @@ var recovery_site: String = ""
 var current_task_id: String = "task.first_recon"
 var task_settled: bool = false
 
+func reset_for_new_scenario() -> void:
+	mode = "bridge"
+	player_alive = true
+	ship_afloat = true
+	aircraft_operational = true
+	target_identified = false
+	player_recovered = false
+	recovery_site = ""
+	current_task_id = "task.first_recon"
+	task_settled = false
+	get_tree().paused = false
+	EventBus.record("scenario_started", {"task_id": current_task_id})
+
 func change_mode(next_mode: String) -> bool:
 	if next_mode == "settlement":
 		push_warning("[GameManager] use settle() to enter settlement")

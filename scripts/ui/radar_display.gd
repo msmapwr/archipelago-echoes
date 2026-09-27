@@ -8,6 +8,7 @@ const GRID_COLOR := Color("315648")
 const RADAR_COLOR := Color("8be6a3")
 const SELECTED_COLOR := Color("e8af58")
 const OWN_SHIP_COLOR := Color("65b5e8")
+const CONFIRMED_COLOR := Color("ea6262")
 const LAND_COLOR := Color("304d43")
 const SHORE_COLOR := Color("83a48a")
 
@@ -19,6 +20,17 @@ var range_km: float = 0.0
 var land_areas: Array[Dictionary] = []
 var own_position_km: Vector2 = Vector2.ZERO
 var own_heading_degrees: float = 0.0
+var aircraft_position_km: Vector2 = Vector2.ZERO
+var aircraft_visible: bool = false
+var contact_confirmed: bool = false
+var sweep_angle_degrees: float = 0.0
+
+func _ready() -> void:
+	WorldClock.time_advanced.connect(_on_world_time_advanced)
+
+func _on_world_time_advanced(total_seconds: float) -> void:
+	sweep_angle_degrees = fposmod(total_seconds * 12.0, 360.0)
+	queue_redraw()
 
 func set_land_areas(areas: Array[Dictionary], position_km: Vector2) -> void:
 	land_areas = areas.duplicate(true)
@@ -29,11 +41,17 @@ func set_ship_heading(heading_degrees: float) -> void:
 	own_heading_degrees = heading_degrees
 	queue_redraw()
 
-func set_contact(id: String, bearing: float, distance: float, visible: bool) -> void:
+func set_aircraft(position_km: Vector2, is_visible: bool) -> void:
+	aircraft_position_km = position_km
+	aircraft_visible = is_visible
+	queue_redraw()
+
+func set_contact(id: String, bearing: float, distance: float, is_visible: bool, confirmed: bool = false) -> void:
 	contact_id = id
 	bearing_degrees = bearing
 	range_km = distance
-	contact_visible = visible and distance <= MAX_RANGE_KM
+	contact_confirmed = confirmed
+	contact_visible = is_visible and distance <= MAX_RANGE_KM
 	if not contact_visible and contact_selected_state:
 		clear_selection()
 	queue_redraw()
@@ -68,16 +86,25 @@ func _draw() -> void:
 		var island_radius := island_radius_km * radius / MAX_RANGE_KM
 		draw_circle(point, island_radius, LAND_COLOR)
 		draw_arc(point, island_radius, 0.0, TAU, 48, SHORE_COLOR, 1.0, true)
+		draw_arc(point, island_radius * 0.7, 0.0, TAU, 48, Color("547668"), 1.0, true)
+		draw_arc(point, island_radius * 0.38, 0.0, TAU, 48, Color("547668"), 1.0, true)
 	for ring in range(1, 5):
 		draw_arc(center, radius * float(ring) / 4.0, 0.0, TAU, 96, GRID_COLOR, 1.0, true)
 	draw_line(center + Vector2(-radius, 0), center + Vector2(radius, 0), GRID_COLOR, 1.0)
 	draw_line(center + Vector2(0, -radius), center + Vector2(0, radius), GRID_COLOR, 1.0)
+	var sweep_direction := Vector2(sin(deg_to_rad(sweep_angle_degrees)), -cos(deg_to_rad(sweep_angle_degrees)))
+	draw_line(center, center + sweep_direction * radius, Color(0.32, 0.75, 0.49, 0.2), 2.0, true)
 	for tick in range(0, 360, 30):
 		var direction := Vector2(sin(deg_to_rad(float(tick))), -cos(deg_to_rad(float(tick))))
 		draw_line(center + direction * (radius - 9.0), center + direction * radius, GRID_COLOR, 2.0, true)
 	var own_direction := Vector2(sin(deg_to_rad(own_heading_degrees)), -cos(deg_to_rad(own_heading_degrees)))
 	draw_line(center + own_direction * 11.0, center + own_direction * 30.0, OWN_SHIP_COLOR, 3.0, true)
 	draw_circle(center, 5.0, OWN_SHIP_COLOR)
+	if aircraft_visible:
+		var aircraft_offset := aircraft_position_km - own_position_km
+		if aircraft_offset.length() <= MAX_RANGE_KM:
+			var aircraft_point := center + aircraft_offset * radius / MAX_RANGE_KM
+			draw_colored_polygon(PackedVector2Array([aircraft_point + Vector2(0, -8), aircraft_point + Vector2(-6, 6), aircraft_point + Vector2(6, 6)]), OWN_SHIP_COLOR)
 	var font := ThemeDB.fallback_font
 	draw_string(font, center + Vector2(-10, -radius - 12), "N", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, RADAR_COLOR)
 	draw_string(font, center + Vector2(radius + 8, 5), "E", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, GRID_COLOR)
@@ -86,7 +113,7 @@ func _draw() -> void:
 	draw_string(font, center + Vector2(radius - 43, radius + 23), "25 km", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, GRID_COLOR)
 	if contact_visible:
 		var point := _contact_position()
-		var marker_color := SELECTED_COLOR if contact_selected_state else RADAR_COLOR
+		var marker_color := SELECTED_COLOR if contact_selected_state else (CONFIRMED_COLOR if contact_confirmed else RADAR_COLOR)
 		draw_circle(point, 8.0, marker_color)
 		draw_arc(point, 15.0, 0.0, TAU, 32, marker_color, 2.0, true)
 		draw_string(font, point + Vector2(20, -10), "A1", HORIZONTAL_ALIGNMENT_LEFT, -1, 17, marker_color)

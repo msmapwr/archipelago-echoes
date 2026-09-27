@@ -1,27 +1,33 @@
 # 群岛回波 / Echoes of the Archipelago
 
-Godot 4.7.2 游戏项目，当前已完成 P0 工程、状态与数据骨架、可交互雷达样例、P1.1 固定种子地图和世界时钟，以及 P1.2 的航行与接触观测部分。玩法方向与开发阶段见 [项目总计划](docs/plan.md) 和 [详细开发计划](docs/development-plan.md)，视觉方向见 [游戏美学计划](docs/archipelago_echoes_aesthetic_plan.md)。P0 规则及状态见 [决策记录](docs/decisions/2026-09-27-p0-rules.md) 和 [状态流程](docs/p0-state-flow.md)；世界与航行规则见 [P1.1 说明](docs/p1-world.md) 和 [P1.2 航行说明](docs/p1-navigation.md)。
+使用 Godot 4.7.2 开发的海空战术游戏原型。当前主场景是一台可交互的 CRT 战术终端，内含固定种子群岛地图与首关任务：搜索接触、识别或交火、驾驶侦察机、返航并结算。设计方向见 [游戏美学计划](docs/archipelago_echoes_aesthetic_plan.md)，阶段与后续工作见 [详细开发计划](docs/development-plan.md)。
 
-## 打开项目
+## 运行与首关操作
 
-1. 使用 Godot 4.7.2 标准版。
-2. 在 Godot 项目管理器中导入仓库根目录的 `project.godot`。
-3. 打开工程后运行主场景。点击雷达标记选择接触，按 Esc 取消，按空格暂停或继续；点击“下一次扫描”查看接触更新和失联。右侧按钮以 15° 调整航向、以 5 kn 调整航速；舰艇在模拟时间内移动，航路碰到岛屿或地图边界时自动停车。雷达标记表示最后一次观测点，失联后隐藏。当前接触仍为静止样例，战斗、敌方机动和识别尚未实现。
+1. 使用 Godot 4.7.2 标准版导入根目录的 `project.godot`，运行项目。
+2. 在舰桥点击雷达回波选择 A1；执行两次有效扫描后可确认目标。也可以出击，在距离目标 3 km 内目视侦察完成确认。
+3. 舰桥可调整航向、航速；目标已确认、位于射程内且接触情报未过期时，可用甲板炮射击。敌舰会巡逻并在接近后还击。
+4. 点击“配置出击”与“开始出击”，等待指挥权移交；飞机可调整航向或导航至 A1、母舰、机场，在 2 km 内执行一次对海攻击。
+5. 点击“开始返航”，靠近回收点后降落。母舰回收要求距离不超过 2 km、航速不超过 12 kn；若母舰沉没，可改往友方机场，在 3 km 内降落。确认目标且指挥官安全回收后执行结算。
 
-命令行可用时，在仓库根目录运行：
+空格暂停或继续，Esc 清除雷达选择；页脚可切换 1 倍与 10 倍模拟时间。命令失败会在右侧显示原因。战役失败或任务结算后可重新开始首关。
+
+## 验证
+
+在仓库根目录运行：
 
 ```powershell
 godot --headless --path . --editor --quit
 godot --headless --path . --quit-after 1
-godot --headless --path . --script res://tests/p0_smoke.gd --log-file p0-test.log
+godot --headless --path . --script res://tests/p0_smoke.gd
 godot --headless --path . --script res://tests/p1_world_smoke.gd
 godot --headless --path . --script res://tests/p1_navigation_smoke.gd
+godot --headless --path . --script res://tests/m1_mission_smoke.gd
+godot --path . --script res://tests/m1_ui_smoke.gd
 ```
 
-## 目录
+最后一项使用图形窗口检查 CRT 内鼠标输入。规则、已验证分支和原型限制见 [M1 首关说明](docs/m1-vertical-slice.md)；版本变更见 [CHANGELOG](CHANGELOG.md)。
 
-- 仓库根目录：Godot 工程、场景、脚本、数据与资源。
-- `docs/`：玩法、开发和决策文档。
-- `AGENTS.md`：本项目开发规范。
+## 项目状态
 
-后续按详细计划逐步加入系统和资源。`addons/` 暂未引入测试插件或其他依赖。静态样例数据使用 `.tres`，缺失 ID 和错误引用由 `DataManager` 报告。`p0-test.log` 仅供本地验证，不属于项目内容。
+首关的自动化闭环已通过。实际玩家游玩记录、长期平衡、更多关卡、完整海空战和战役系统仍在后续阶段。仓库根目录存放 Godot 场景、脚本、样例数据与测试；`docs/` 存放计划和设计决策，`AGENTS.md` 为开发规范。

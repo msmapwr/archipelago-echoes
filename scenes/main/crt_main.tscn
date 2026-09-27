@@ -1,0 +1,458 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/crt_main.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/ui/radar_display.gd" id="2"]
+[ext_resource type="Script" path="res://scripts/ui/crt_bezel.gd" id="3"]
+[ext_resource type="Shader" path="res://shaders/crt_glass.gdshader" id="4"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_radar"]
+bg_color = Color(0.025, 0.065, 0.048, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.17, 0.34, 0.26, 1)
+content_margin_left = 4.0
+content_margin_top = 4.0
+content_margin_right = 4.0
+content_margin_bottom = 4.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_details"]
+bg_color = Color(0.03, 0.075, 0.056, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.17, 0.34, 0.26, 1)
+content_margin_left = 12.0
+content_margin_top = 8.0
+content_margin_right = 12.0
+content_margin_bottom = 8.0
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_glass"]
+shader = ExtResource("4")
+
+[node name="CRTMain" type="Control"]
+process_mode = 3
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1")
+
+[node name="Bezel" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("3")
+
+[node name="ScreenContainer" type="SubViewportContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 50.0
+offset_top = 50.0
+offset_right = -50.0
+offset_bottom = -50.0
+grow_horizontal = 2
+grow_vertical = 2
+stretch = true
+
+[node name="ScreenViewport" type="SubViewport" parent="ScreenContainer"]
+handle_input_locally = false
+size = Vector2i(1180, 620)
+render_target_update_mode = 4
+
+[node name="Terminal" type="Control" parent="ScreenContainer/ScreenViewport"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Phosphor" type="ColorRect" parent="ScreenContainer/ScreenViewport/Terminal"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.031, 0.067, 0.048, 1)
+
+[node name="Header" type="HBoxContainer" parent="ScreenContainer/ScreenViewport/Terminal"]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_left = 20.0
+offset_top = 12.0
+offset_right = -20.0
+offset_bottom = 48.0
+grow_horizontal = 2
+theme_override_constants/separation = 16
+
+[node name="Brand" type="Label" parent="ScreenContainer/ScreenViewport/Terminal/Header"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "群岛回波   /   ECHOES OF THE ARCHIPELAGO"
+theme_override_font_sizes/font_size = 23
+theme_override_colors/font_color = Color(0.545, 0.902, 0.639, 1)
+
+[node name="ModeStatus" type="Label" parent="ScreenContainer/ScreenViewport/Terminal/Header"]
+layout_mode = 2
+text = "CIC / 舰桥"
+theme_override_font_sizes/font_size = 17
+theme_override_colors/font_color = Color(0.91, 0.686, 0.345, 1)
+
+[node name="Content" type="HBoxContainer" parent="ScreenContainer/ScreenViewport/Terminal"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 20.0
+offset_top = 58.0
+offset_right = -20.0
+offset_bottom = -53.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 14
+
+[node name="RadarFrame" type="PanelContainer" parent="ScreenContainer/ScreenViewport/Terminal/Content"]
+custom_minimum_size = Vector2(450, 450)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_styles/panel = SubResource("StyleBoxFlat_radar")
+
+[node name="Radar" type="Control" parent="ScreenContainer/ScreenViewport/Terminal/Content/RadarFrame"]
+custom_minimum_size = Vector2(440, 440)
+layout_mode = 2
+mouse_filter = 1
+script = ExtResource("2")
+
+[node name="DetailsFrame" type="PanelContainer" parent="ScreenContainer/ScreenViewport/Terminal/Content"]
+custom_minimum_size = Vector2(466, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_styles/panel = SubResource("StyleBoxFlat_details")
+
+[node name="DetailsScroll" type="ScrollContainer" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="Details" type="VBoxContainer" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
+
+[node name="MissionStatus" type="Label" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details"]
+layout_mode = 2
+text = "任务 / 确认 A1，指挥官安全返回"
+theme_override_font_sizes/font_size = 16
+theme_override_colors/font_color = Color(0.78, 0.88, 0.75, 1)
+
+[node name="ContactStatus" type="Label" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details"]
+layout_mode = 2
+text = "A1 / 搜索中"
+theme_override_font_sizes/font_size = 19
+theme_override_colors/font_color = Color(0.91, 0.686, 0.345, 1)
+
+[node name="ContactDetails" type="Label" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details"]
+layout_mode = 2
+autowrap_mode = 3
+text = "等待扫描"
+theme_override_font_sizes/font_size = 16
+theme_override_colors/font_color = Color(0.75, 0.88, 0.77, 1)
+
+[node name="SelectionDetails" type="Label" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details"]
+layout_mode = 2
+text = "未选择接触 · 点击雷达回波"
+theme_override_font_sizes/font_size = 15
+theme_override_colors/font_color = Color(0.65, 0.76, 0.68, 1)
+
+[node name="RadarActions" type="HBoxContainer" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="NextSweep" type="Button" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details/RadarActions"]
+custom_minimum_size = Vector2(0, 38)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "主动扫描"
+
+[node name="Identify" type="Button" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details/RadarActions"]
+custom_minimum_size = Vector2(0, 38)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "确认接触"
+
+[node name="Fire" type="Button" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details/RadarActions"]
+custom_minimum_size = Vector2(0, 38)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "甲板炮"
+
+[node name="ShipControls" type="VBoxContainer" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details"]
+layout_mode = 2
+theme_override_constants/separation = 5
+
+[node name="ShipTitle" type="Label" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details/ShipControls"]
+layout_mode = 2
+text = "舰艇航行  /  CONNING"
+theme_override_font_sizes/font_size = 17
+theme_override_colors/font_color = Color(0.545, 0.902, 0.639, 1)
+
+[node name="ShipDetails" type="Label" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details/ShipControls"]
+layout_mode = 2
+text = ""
+theme_override_font_sizes/font_size = 15
+theme_override_colors/font_color = Color(0.75, 0.88, 0.77, 1)
+
+[node name="HeadingControls" type="HBoxContainer" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details/ShipControls"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="TurnPort" type="Button" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details/ShipControls/HeadingControls"]
+custom_minimum_size = Vector2(0, 38)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "左转 15°"
+
+[node name="TurnStarboard" type="Button" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details/ShipControls/HeadingControls"]
+custom_minimum_size = Vector2(0, 38)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "右转 15°"
+
+[node name="SpeedControls" type="HBoxContainer" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details/ShipControls"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="SlowDown" type="Button" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details/ShipControls/SpeedControls"]
+custom_minimum_size = Vector2(0, 38)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "减速 5 kn"
+
+[node name="SpeedUp" type="Button" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details/ShipControls/SpeedControls"]
+custom_minimum_size = Vector2(0, 38)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "加速 5 kn"
+
+[node name="NavigationStatus" type="Label" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details/ShipControls"]
+layout_mode = 2
+text = "航行控制待命"
+theme_override_font_sizes/font_size = 15
+theme_override_colors/font_color = Color(0.91, 0.686, 0.345, 1)
+
+[node name="FlightControls" type="VBoxContainer" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details"]
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 5
+
+[node name="FlightTitle" type="Label" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details/FlightControls"]
+layout_mode = 2
+text = "隼影侦察机  /  FLIGHT CONTROL"
+theme_override_font_sizes/font_size = 17
+theme_override_colors/font_color = Color(0.4, 0.71, 0.91, 1)
+
+[node name="FlightDetails" type="Label" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details/FlightControls"]
+layout_mode = 2
+text = ""
+theme_override_font_sizes/font_size = 15
+theme_override_colors/font_color = Color(0.75, 0.88, 0.77, 1)
+
+[node name="FlightHeadingControls" type="HBoxContainer" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details/FlightControls"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="FlightPort" type="Button" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details/FlightControls/FlightHeadingControls"]
+custom_minimum_size = Vector2(0, 38)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "左转 15°"
+
+[node name="FlightStarboard" type="Button" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details/FlightControls/FlightHeadingControls"]
+custom_minimum_size = Vector2(0, 38)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "右转 15°"
+
+[node name="FlightNavControls" type="HBoxContainer" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details/FlightControls"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="NavContact" type="Button" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details/FlightControls/FlightNavControls"]
+custom_minimum_size = Vector2(0, 38)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "航向 A1"
+
+[node name="NavShip" type="Button" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details/FlightControls/FlightNavControls"]
+custom_minimum_size = Vector2(0, 38)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "航向母舰"
+
+[node name="NavAirfield" type="Button" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details/FlightControls/FlightNavControls"]
+custom_minimum_size = Vector2(0, 38)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "航向机场"
+
+[node name="FlightActions" type="HBoxContainer" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details/FlightControls"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="Recon" type="Button" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details/FlightControls/FlightActions"]
+custom_minimum_size = Vector2(0, 38)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "目视侦察"
+
+[node name="Attack" type="Button" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details/FlightControls/FlightActions"]
+custom_minimum_size = Vector2(0, 38)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "对海攻击"
+
+[node name="Debrief" type="VBoxContainer" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details"]
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="DebriefTitle" type="Label" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details/Debrief"]
+layout_mode = 2
+text = "战后报告  /  AFTER ACTION REPORT"
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(0.545, 0.902, 0.639, 1)
+
+[node name="DebriefDetails" type="Label" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details/Debrief"]
+layout_mode = 2
+text = ""
+theme_override_font_sizes/font_size = 16
+theme_override_colors/font_color = Color(0.75, 0.88, 0.77, 1)
+
+[node name="PhaseActions" type="HBoxContainer" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="Prepare" type="Button" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details/PhaseActions"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "配置出击"
+
+[node name="Launch" type="Button" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details/PhaseActions"]
+visible = false
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "开始出击"
+
+[node name="Cancel" type="Button" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details/PhaseActions"]
+visible = false
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "取消出击"
+
+[node name="Return" type="Button" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details/PhaseActions"]
+visible = false
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "开始返航"
+
+[node name="Land" type="Button" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details/PhaseActions"]
+visible = false
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "执行降落"
+
+[node name="Settle" type="Button" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details/PhaseActions"]
+visible = false
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "任务结算"
+
+[node name="Restart" type="Button" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details/PhaseActions"]
+visible = false
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "重新开始"
+
+[node name="ActionStatus" type="Label" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details"]
+layout_mode = 2
+autowrap_mode = 3
+text = "系统待命"
+theme_override_font_sizes/font_size = 15
+theme_override_colors/font_color = Color(0.91, 0.686, 0.345, 1)
+
+[node name="EventDetails" type="Label" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details"]
+layout_mode = 2
+autowrap_mode = 3
+text = "通信日志 / RADIO LOG"
+theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0.63, 0.77, 0.66, 1)
+
+[node name="Footer" type="HBoxContainer" parent="ScreenContainer/ScreenViewport/Terminal"]
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 20.0
+offset_top = -44.0
+offset_right = -20.0
+offset_bottom = -10.0
+grow_horizontal = 2
+grow_vertical = 0
+theme_override_constants/separation = 14
+
+[node name="PauseStatus" type="Button" parent="ScreenContainer/ScreenViewport/Terminal/Footer"]
+layout_mode = 2
+text = "运行中 · 空格暂停"
+
+[node name="TimeScale" type="Button" parent="ScreenContainer/ScreenViewport/Terminal/Footer"]
+layout_mode = 2
+text = "时间 ×1"
+
+[node name="TimeStatus" type="Label" parent="ScreenContainer/ScreenViewport/Terminal/Footer"]
+layout_mode = 2
+text = "T+00:00"
+theme_override_colors/font_color = Color(0.545, 0.902, 0.639, 1)
+
+[node name="Help" type="Label" parent="ScreenContainer/ScreenViewport/Terminal/Footer"]
+layout_mode = 2
+size_flags_horizontal = 3
+horizontal_alignment = 2
+text = "TAB 巡航控件  /  ESC 清除目标"
+theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0.63, 0.77, 0.66, 1)
+
+[node name="GlassOverlay" type="ColorRect" parent="ScreenContainer/ScreenViewport/Terminal"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+material = SubResource("ShaderMaterial_glass")
+color = Color(1, 1, 1, 1)

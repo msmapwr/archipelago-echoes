@@ -1,0 +1,78 @@
+extends SceneTree
+
+var failures: PackedStringArray = []
+
+func _initialize() -> void:
+	call_deferred("_run")
+
+func _run() -> void:
+	var mission: Node = root.get_node("MissionController")
+	var game: Node = root.get_node("GameManager")
+	var clock: Node = root.get_node("WorldClock")
+	mission.restart_scenario()
+	var main: Control = load("res://scenes/main/crt_main.tscn").instantiate()
+	root.add_child(main)
+	var terminal: Control = main.get_node("ScreenContainer/ScreenViewport/Terminal")
+	var details: VBoxContainer = terminal.get_node("Content/DetailsFrame/DetailsScroll/Details")
+	var radar: Control = terminal.get_node("Content/RadarFrame/Radar")
+	await process_frame
+	_check(radar.contact_visible, "CRT starts with a live radar report")
+	_check("群岛回波" in terminal.get_node("Header/Brand").text, "CRT displays game title")
+	var click := InputEventMouseButton.new()
+	click.button_index = MOUSE_BUTTON_LEFT
+	click.pressed = true
+	click.position = main.get_node("ScreenContainer").position + radar.get_global_rect().position + radar._contact_position()
+	click.global_position = click.position
+	if DisplayServer.get_name() == "headless":
+		click.position = radar._contact_position()
+		click.global_position = click.position
+		radar._gui_input(click)
+	else:
+		Input.parse_input_event(click)
+	await process_frame
+	_check(main.selected_contact_id == "contact.alpha", "radar selection reaches CRT controller")
+	details.get_node("RadarActions/Fire").emit_signal("pressed")
+	_check("尚未确认" in details.get_node("ActionStatus").text, "failed fire explains missing identification")
+	terminal.get_node("Footer/PauseStatus").emit_signal("pressed")
+	_check(paused and details.get_node("RadarActions/NextSweep").disabled, "pause freezes scan action")
+	terminal.get_node("Footer/PauseStatus").emit_signal("pressed")
+	_check(not paused, "pause control resumes world")
+	terminal.get_node("Footer/TimeScale").emit_signal("pressed")
+	_check(clock.time_scale == 10.0 and "×10" in terminal.get_node("Footer/TimeScale").text, "time compression is visible")
+	clock.set_time_scale(1.0)
+	details.get_node("PhaseActions/Prepare").emit_signal("pressed")
+	_check(game.mode == "configuration" and details.get_node("PhaseActions/Launch").visible, "sortie configuration exposes launch action")
+	details.get_node("PhaseActions/Launch").emit_signal("pressed")
+	clock.advance(5.0)
+	_check(game.mode == "cockpit" and details.get_node("FlightControls").visible, "cockpit displays flight controls")
+	clock.advance(240.0)
+	details.get_node("FlightControls/FlightActions/Recon").emit_signal("pressed")
+	_check(game.target_identified and "确认" in details.get_node("ActionStatus").text, "recon button confirms nearby contact")
+	details.get_node("PhaseActions/Return").emit_signal("pressed")
+	clock.advance(250.0)
+	details.get_node("PhaseActions/Land").emit_signal("pressed")
+	_check(game.mode == "bridge" and game.player_recovered, "landing returns to bridge")
+	details.get_node("PhaseActions/Settle").emit_signal("pressed")
+	_check(game.mode == "settlement" and details.get_node("PhaseActions/Restart").visible, "successful mission offers restart")
+	details.get_node("PhaseActions/Restart").emit_signal("pressed")
+	_check(game.mode == "bridge" and not game.target_identified, "restart begins a fresh mission")
+	await process_frame
+	var details_bottom: float = terminal.get_node("Content/DetailsFrame").get_rect().end.y
+	var footer_top: float = terminal.get_node("Footer").get_rect().position.y
+	_check(details_bottom <= footer_top, "CRT details do not overlap footer")
+	main.queue_free()
+	mission.restart_scenario()
+	_finish()
+
+func _check(condition: bool, description: String) -> void:
+	if not condition:
+		failures.append(description)
+
+func _finish() -> void:
+	if failures.is_empty():
+		print("M1 CRT UI smoke test passed")
+		quit(0)
+	else:
+		for failure in failures:
+			printerr("FAIL: " + failure)
+		quit(1)
