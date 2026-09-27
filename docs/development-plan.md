@@ -1,4 +1,4 @@
-# 《雷达指挥官：群岛空海战》详细开发计划
+# 《群岛回波 / Echoes of the Archipelago》详细开发计划
 
 状态：执行草案，2026-09-27。依据 `plan.md`、`plan-code.md` 和 `plan-legacy.md` 编写。本文规定阶段、依赖、交付物和验收；未决玩法规则仍以 `plan.md` 第 7 节为准。
 

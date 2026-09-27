@@ -1,6 +1,6 @@
 # P1.2 航行与接触观测原型
 
-状态：P1.2 局部实现，2026-09-28。沿用 `p1-world.md` 的固定地图；美学方向参考 `radar_commander_aesthetic_plan.md`。
+状态：P1.2 局部实现，2026-09-28。沿用 `p1-world.md` 的固定地图；美学方向参考 `archipelago_echoes_aesthetic_plan.md`。
 
 ## 舰艇与时钟
 

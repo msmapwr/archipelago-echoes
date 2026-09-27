@@ -1,6 +1,6 @@
-# 雷达指挥官：群岛空海战
+# 群岛回波 / Echoes of the Archipelago
 
-Godot 4.7.2 游戏项目，当前已完成 P0 工程、状态与数据骨架、可交互雷达样例、P1.1 固定种子地图和世界时钟，以及 P1.2 的航行与接触观测部分。玩法方向与开发阶段见 [项目总计划](docs/plan.md) 和 [详细开发计划](docs/development-plan.md)，视觉方向见 [游戏美学计划](docs/radar_commander_aesthetic_plan.md)。P0 规则及状态见 [决策记录](docs/decisions/2026-09-27-p0-rules.md) 和 [状态流程](docs/p0-state-flow.md)；世界与航行规则见 [P1.1 说明](docs/p1-world.md) 和 [P1.2 航行说明](docs/p1-navigation.md)。
+Godot 4.7.2 游戏项目，当前已完成 P0 工程、状态与数据骨架、可交互雷达样例、P1.1 固定种子地图和世界时钟，以及 P1.2 的航行与接触观测部分。玩法方向与开发阶段见 [项目总计划](docs/plan.md) 和 [详细开发计划](docs/development-plan.md)，视觉方向见 [游戏美学计划](docs/archipelago_echoes_aesthetic_plan.md)。P0 规则及状态见 [决策记录](docs/decisions/2026-09-27-p0-rules.md) 和 [状态流程](docs/p0-state-flow.md)；世界与航行规则见 [P1.1 说明](docs/p1-world.md) 和 [P1.2 航行说明](docs/p1-navigation.md)。
 
 ## 打开项目
 

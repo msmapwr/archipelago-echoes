@@ -1,4 +1,4 @@
-《雷达指挥官：群岛空海战》开发编写计划
+《群岛回波 / Echoes of the Archipelago》开发编写计划
 
 引擎：Godot 4.x
 语言：GDScript（主逻辑）+ C#（可选，用于复杂AI与数据模块）
@@ -32,7 +32,7 @@ P7 平衡与打磨 平衡、性能、音效、无障碍、本地化 6–8 周
 2.1 目录结构
 
 ```
-radar-commander/
+archipelago-echoes/
 ├── project.godot
 ├── addons/
 ├── assets/

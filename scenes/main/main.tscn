@@ -158,7 +158,7 @@ offset_left = 24.0
 offset_top = 16.0
 offset_right = 800.0
 offset_bottom = 54.0
-text = "雷达指挥官   /   P1 航行与接触观测"
+text = "群岛回波   /   Echoes of the Archipelago"
 theme_override_font_sizes/font_size = 28
 theme_override_colors/font_color = Color(0.55, 0.9, 0.64, 1)
 
