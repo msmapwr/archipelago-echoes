@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="TaskDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/task_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "task.first_recon"
+display_name = "首关：确认海峡接触"
+ship_id = "ship.haven"
+aircraft_id = "aircraft.kestrel"
+target_contact_id = "contact.alpha"
+objective = "识别指定接触，并让指挥官安全返回。"

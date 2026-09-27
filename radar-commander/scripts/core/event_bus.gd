@@ -1,0 +1,19 @@
+extends Node
+
+signal event_recorded(event: Dictionary)
+signal contact_discovered(contact_id: String)
+signal contact_updated(contact_id: String)
+signal contact_lost(contact_id: String)
+signal command_issued(command_id: String)
+signal weapon_fired(weapon_id: String)
+signal damage_reported(entity_id: String)
+signal mode_changed(previous_mode: String, current_mode: String)
+signal task_settled(task_id: String, result: String)
+
+var history: Array[Dictionary] = []
+
+func record(kind: String, details: Dictionary = {}) -> void:
+	var event: Dictionary = {"kind": kind, "details": details.duplicate(true), "time_msec": Time.get_ticks_msec()}
+	history.append(event)
+	event_recorded.emit(event)
+	print("[EventBus] %s %s" % [kind, JSON.stringify(details)])

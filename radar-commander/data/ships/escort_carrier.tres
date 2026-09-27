@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="ShipDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ship_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "ship.haven"
+display_name = "海岬号轻型航舰"
+max_speed_knots = 22.0
+aircraft_ids = PackedStringArray("aircraft.kestrel")
+weapon_ids = PackedStringArray("weapon.deck_gun")

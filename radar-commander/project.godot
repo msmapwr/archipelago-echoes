@@ -1,0 +1,37 @@
+; Engine configuration file.
+; Radar Commander project bootstrap.
+
+config_version=5
+
+[application]
+
+config/name="雷达指挥官：群岛空海战"
+run/main_scene="res://scenes/main/main.tscn"
+
+[autoload]
+
+EventBus="*res://scripts/core/event_bus.gd"
+DataManager="*res://scripts/core/data_manager.gd"
+GameManager="*res://scripts/core/game_manager.gd"
+
+[input]
+
+ui_cancel={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":4194305)]
+}
+pause_simulation={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":32)]
+}
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"

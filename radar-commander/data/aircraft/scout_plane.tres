@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="AircraftDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/aircraft_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "aircraft.kestrel"
+display_name = "隼影侦察机"
+cruise_speed_knots = 135.0
+fuel_minutes = 75.0
