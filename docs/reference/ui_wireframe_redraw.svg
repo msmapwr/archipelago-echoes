@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1245" height="646" viewBox="0 0 1245 646">
+  <title>UI 设计草图 SVG 重绘</title>
+  <desc>根据用户提供的 UI 草图重新绘制的可编辑 SVG 线框图。</desc>
+
+  <style>
+    .panel {
+      fill: #ffffff;
+      stroke: #1a1a1a;
+      stroke-width: 1.6;
+    }
+    .label {
+      fill: #1a1a1a;
+      font-family: "Noto Sans CJK SC", "Microsoft YaHei", "PingFang SC", sans-serif;
+      font-size: 16px;
+      dominant-baseline: middle;
+    }
+    .small {
+      font-size: 15px;
+    }
+    .center {
+      text-anchor: middle;
+    }
+  </style>
+
+  <!-- 背景 -->
+  <rect x="0" y="0" width="1245" height="646" fill="#ffffff"/>
+
+  <!-- 整体 16:9 屏幕框 -->
+  <rect id="screen" class="panel" x="98" y="22" width="924" height="604" rx="25" ry="25"/>
+  <text class="label small" x="127" y="39">16:9的电脑屏幕</text>
+
+  <!-- 左侧：一大堆仪表 -->
+  <rect id="left-instruments" class="panel" x="111" y="51" width="125" height="490" rx="20" ry="20"/>
+  <text class="label center" x="173.5" y="120">一大堆仪表</text>
+
+  <!-- 顶部：命令 / 消息 / 警告 -->
+  <rect id="top-messages" class="panel" x="250" y="32" width="629" height="56" rx="13" ry="13"/>
+  <text class="label" x="299" y="59">命令、消息、警告等</text>
+
+  <!-- 中央主 CRT 区域 -->
+  <rect id="main-crt" class="panel" x="250" y="101" width="634" height="449" rx="21" ry="21"/>
+  <text class="label small" x="300" y="121">同样是16:9的主CRT</text>
+
+  <!-- 雷达 -->
+  <circle id="radar" class="panel" cx="446" cy="344" r="189"/>
+  <text class="label center" x="446" y="344">雷达</text>
+
+  <!-- 一大堆状态 -->
+  <rect id="status-panel" class="panel" x="643" y="136" width="229" height="399" rx="21" ry="21"/>
+  <text class="label center" x="757.5" y="200">一大堆状态</text>
+
+  <!-- 右侧：操作区 -->
+  <rect id="controls" class="panel" x="887" y="39" width="126" height="512" rx="23" ry="23"/>
+  <text class="label" x="908" y="222">
+    <tspan x="908" dy="0">一大堆操作</tspan>
+    <tspan x="908" dy="21">用拉杆，</tspan>
+    <tspan x="908" dy="21">按钮来表示</tspan>
+    <tspan x="908" dy="21">重要的可以</tspan>
+    <tspan x="908" dy="21">用玻璃罩罩着</tspan>
+  </text>
+
+  <!-- 左下：时间 -->
+  <rect id="time-panel" class="panel" x="114" y="555" width="92" height="59" rx="12" ry="12"/>
+  <text class="label center" x="160" y="585">时间</text>
+
+  <!-- 底部：弹药 -->
+  <rect id="ammo-panel" class="panel" x="221" y="559" width="740" height="54" rx="13" ry="13"/>
+  <text class="label center" x="591" y="591">弹药</text>
+</svg>

@@ -191,6 +191,12 @@ layout_mode = 2
 size_flags_horizontal = 3
 text = "主动扫描"
 
+[node name="ToggleEmission" type="Button" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details/RadarActions"]
+custom_minimum_size = Vector2(0, 38)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "雷达静默"
+
 [node name="Identify" type="Button" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details/RadarActions"]
 custom_minimum_size = Vector2(0, 38)
 layout_mode = 2

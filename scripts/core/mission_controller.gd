@@ -9,8 +9,13 @@ const SCAN_RANGE_KM := 25.0
 const RECON_RANGE_KM := 3.0
 const GUN_DAMAGE := 50.0
 const ENEMY_DAMAGE := 20.0
+const RADAR_INTERCEPT_RANGE_KM := 14.0
+const ENEMY_GUN_RANGE_KM := 10.0
+const VISUAL_SPOTTING_RANGE_KM := 6.0
+const TRACK_MEMORY_SECONDS := 90.0
 const KNOT_TO_KM_PER_SECOND := 1.852 / 3600.0
 
+var radar_emitting: bool = true
 var contact_visible: bool = false
 var contact_scan_count: int = 0
 var last_contact_position_km: Vector2 = Vector2.ZERO
@@ -26,6 +31,8 @@ var enemy_alive: bool = true
 var enemy_heading_degrees: float = 90.0
 var enemy_speed_knots: float = 6.0
 var next_enemy_fire_seconds: float = 35.0
+var enemy_tracking_ship: bool = false
+var enemy_alert_until_seconds: float = 0.0
 var _enemy_origin_km: Vector2 = Vector2.ZERO
 
 var switch_seconds_remaining: float = 0.0
@@ -55,6 +62,7 @@ func restart_scenario() -> void:
 	scan()
 
 func _initialize_scenario() -> void:
+	radar_emitting = true
 	contact_visible = false
 	contact_scan_count = 0
 	last_contact_position_km = Vector2.ZERO
@@ -68,6 +76,8 @@ func _initialize_scenario() -> void:
 	enemy_alive = true
 	enemy_heading_degrees = 90.0
 	next_enemy_fire_seconds = WorldClock.elapsed_seconds + 35.0
+	enemy_tracking_ship = false
+	enemy_alert_until_seconds = 0.0
 	_enemy_origin_km = WorldState.contact_position_km
 	switch_seconds_remaining = 0.0
 	aircraft_position_km = WorldState.ship_position_km
@@ -88,6 +98,8 @@ func _initialize_scenario() -> void:
 func scan() -> bool:
 	if GameManager.mode == "settlement" or GameManager.mode == "campaign_failed":
 		return _reject("任务已结束，无法扫描")
+	if not radar_emitting:
+		return _reject("雷达静默中；开机后才能扫描")
 	var was_visible := contact_visible
 	var range_km := WorldState.contact_range_km()
 	contact_visible = enemy_alive and range_km <= SCAN_RANGE_KM and WorldState.map.can_navigate_segment(WorldState.ship_position_km, WorldState.contact_position_km)
@@ -111,9 +123,35 @@ func scan() -> bool:
 	state_changed.emit()
 	return _accept("A1 回波已复测" if was_visible else "A1 未知水面回波")
 
+func set_radar_emitting(is_enabled: bool) -> bool:
+	if GameManager.mode != "bridge" or not GameManager.ship_afloat:
+		return _reject("只能在舰桥切换舰载雷达")
+	if get_tree().paused:
+		return _reject("模拟暂停，无法切换雷达")
+	if radar_emitting == is_enabled:
+		return _reject("雷达状态未改变")
+	radar_emitting = is_enabled
+	EventBus.record("radar_emission_changed", {"emitting": radar_emitting})
+	if radar_emitting:
+		var found := scan()
+		_update_enemy_tracking(WorldClock.elapsed_seconds)
+		state_changed.emit()
+		if enemy_tracking_ship:
+			return _accept("敌方已截获雷达辐射；注意交战距离")
+		return _accept("主动雷达开启；A1 回波已获得，敌舰可能测向" if found else "主动雷达开启；暂无回波，敌舰可能测向")
+	if contact_visible:
+		contact_visible = false
+		EventBus.contact_lost.emit(CONTACT_ID)
+		EventBus.record("contact_lost", {"id": CONTACT_ID, "reason": "radar_silent"})
+	_update_enemy_tracking(WorldClock.elapsed_seconds)
+	state_changed.emit()
+	return _accept("雷达静默；保留最后观测，敌方追踪不会立即消失" if enemy_tracking_ship else "雷达静默；保留最后观测")
+
 func identify_contact() -> bool:
 	if GameManager.mode != "bridge":
 		return _reject("识别命令需在舰桥下达")
+	if not radar_emitting:
+		return _reject("雷达静默中，无法复测确认")
 	if not contact_visible or contact_scan_count < 2:
 		return _reject("情报不足：需要两次有效扫描")
 	if GameManager.target_identified:
@@ -125,6 +163,8 @@ func identify_contact() -> bool:
 func fire_ship_gun(contact_id: String) -> bool:
 	if GameManager.mode != "bridge" or not GameManager.ship_afloat:
 		return _reject("甲板炮仅可在舰桥指挥")
+	if not radar_emitting:
+		return _reject("雷达静默中，火控无法跟踪接触")
 	if contact_id != CONTACT_ID or not contact_visible or not enemy_alive:
 		return _reject("没有可射击的已选接触")
 	if not GameManager.target_identified:
@@ -142,6 +182,7 @@ func fire_ship_gun(contact_id: String) -> bool:
 		return _reject("岛屿遮挡射线")
 	ship_ammo -= 1
 	next_ship_fire_seconds = WorldClock.elapsed_seconds + 30.0
+	enemy_alert_until_seconds = maxf(enemy_alert_until_seconds, WorldClock.elapsed_seconds + TRACK_MEMORY_SECONDS)
 	EventBus.weapon_fired.emit("weapon.deck_gun")
 	EventBus.record("weapon_fired", {"weapon_id": "weapon.deck_gun", "ammo_remaining": ship_ammo})
 	_damage_enemy(GUN_DAMAGE, "deck_gun")
@@ -296,9 +337,10 @@ func _advance_enemy(delta: float) -> void:
 	WorldState.contact_position_km = destination
 
 func _enemy_attack(total_seconds: float) -> void:
-	if not enemy_alive or not GameManager.ship_afloat or total_seconds < next_enemy_fire_seconds:
+	_update_enemy_tracking(total_seconds)
+	if not enemy_alive or not GameManager.ship_afloat or not enemy_tracking_ship or total_seconds < next_enemy_fire_seconds:
 		return
-	if WorldState.contact_range_km() > 10.0 or not WorldState.map.can_navigate_segment(WorldState.ship_position_km, WorldState.contact_position_km):
+	if WorldState.contact_range_km() > ENEMY_GUN_RANGE_KM or not WorldState.map.can_navigate_segment(WorldState.ship_position_km, WorldState.contact_position_km):
 		return
 	next_enemy_fire_seconds = total_seconds + 45.0
 	ship_health = maxf(0.0, ship_health - ENEMY_DAMAGE)
@@ -309,6 +351,26 @@ func _enemy_attack(total_seconds: float) -> void:
 		WorldState.set_ship_command(WorldState.ship_heading_degrees, 0.0)
 		GameManager.report_ship_sunk()
 		_feedback("母舰沉没；空中指挥官可转往友方机场" if aircraft_airborne else "母舰沉没，战役结束")
+
+func _update_enemy_tracking(total_seconds: float) -> void:
+	if not enemy_alive or not GameManager.ship_afloat:
+		enemy_tracking_ship = false
+		return
+	var range_km: float = WorldState.contact_range_km()
+	var line_of_sight: bool = WorldState.map.can_navigate_segment(WorldState.ship_position_km, WorldState.contact_position_km)
+	var radar_intercept: bool = radar_emitting and range_km <= RADAR_INTERCEPT_RANGE_KM and line_of_sight
+	var visual_contact: bool = range_km <= VISUAL_SPOTTING_RANGE_KM and line_of_sight
+	if radar_intercept or visual_contact:
+		enemy_alert_until_seconds = maxf(enemy_alert_until_seconds, total_seconds + TRACK_MEMORY_SECONDS)
+	var tracking: bool = radar_intercept or visual_contact or total_seconds < enemy_alert_until_seconds
+	if tracking and not enemy_tracking_ship:
+		enemy_tracking_ship = true
+		next_enemy_fire_seconds = maxf(next_enemy_fire_seconds, total_seconds + 10.0)
+		EventBus.record("enemy_tracking", {"source": "radar" if radar_intercept else "visual" if visual_contact else "recent_contact", "range_km": range_km})
+		_feedback("敌方测向警报：主动雷达暴露母舰" if radar_intercept else "敌舰接近并发现母舰")
+	elif not tracking and enemy_tracking_ship:
+		enemy_tracking_ship = false
+		EventBus.record("enemy_tracking_lost", {})
 
 func _start_flight() -> void:
 	if GameManager.mode != "switching" or not GameManager.change_mode("cockpit"):
@@ -353,6 +415,8 @@ func _damage_enemy(amount: float, source: String) -> void:
 	EventBus.record("enemy_damaged", {"health": enemy_health, "source": source})
 	if enemy_health <= 0.0:
 		enemy_alive = false
+		enemy_tracking_ship = false
+		enemy_alert_until_seconds = 0.0
 		contact_visible = false
 		EventBus.record("enemy_destroyed", {"id": CONTACT_ID})
 

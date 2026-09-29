@@ -48,6 +48,7 @@ func _ready() -> void:
 
 func _connect_buttons() -> void:
 	_button("RadarActions/NextSweep").pressed.connect(_on_scan_pressed)
+	_button("RadarActions/ToggleEmission").pressed.connect(func() -> void: MissionController.set_radar_emitting(not MissionController.radar_emitting))
 	_button("RadarActions/Identify").pressed.connect(func() -> void: MissionController.identify_contact())
 	_button("RadarActions/Fire").pressed.connect(func() -> void: MissionController.fire_ship_gun(selected_contact_id))
 	_button("ShipControls/HeadingControls/TurnPort").pressed.connect(func() -> void: WorldState.set_ship_command(WorldState.ship_heading_degrees - 15.0, WorldState.ship_speed_knots))
@@ -128,7 +129,7 @@ func _on_world_time_advanced(total_seconds: float) -> void:
 		time_status.text = WorldClock.formatted_time()
 	if total_seconds >= _next_auto_scan_seconds:
 		_next_auto_scan_seconds = total_seconds + 30.0
-		if GameManager.mode != "settlement" and GameManager.mode != "campaign_failed":
+		if MissionController.radar_emitting and GameManager.mode != "settlement" and GameManager.mode != "campaign_failed":
 			MissionController.scan()
 
 func _on_scan_pressed() -> void:
@@ -203,6 +204,8 @@ func _refresh_ui() -> void:
 	_button("PhaseActions/Settle").visible = (mode == "bridge" or mode == "recovered") and GameManager.player_recovered
 	_button("PhaseActions/Restart").visible = mode == "settlement" or mode == "campaign_failed"
 	_button("RadarActions/NextSweep").disabled = get_tree().paused
+	_button("RadarActions/ToggleEmission").disabled = get_tree().paused
+	_button("RadarActions/ToggleEmission").text = "雷达静默" if MissionController.radar_emitting else "开启雷达"
 	_button("RadarActions/Identify").disabled = get_tree().paused
 	_button("RadarActions/Fire").disabled = get_tree().paused
 	pause_status.text = "已暂停 · 点击继续" if get_tree().paused else "运行中 · 空格暂停"
@@ -212,10 +215,14 @@ func _refresh_ui() -> void:
 func _refresh_contact() -> void:
 	if not MissionController.enemy_alive:
 		contact_status.text = "A1 / 目标失能"
+	elif not MissionController.radar_emitting:
+		contact_status.text = "A1 / 静默 · 敌方追踪中" if MissionController.enemy_tracking_ship else "A1 / 雷达静默"
 	elif MissionController.contact_visible:
 		contact_status.text = "A1 / 已确认" if GameManager.target_identified else "A1 / 未知回波"
 	else:
 		contact_status.text = "A1 / 信号丢失"
+	if MissionController.radar_emitting and MissionController.enemy_tracking_ship:
+		contact_status.text += " · 已暴露"
 	if MissionController.contact_scan_count == 0:
 		contact_details.text = "等待首轮扫描"
 	else:
@@ -224,7 +231,7 @@ func _refresh_contact() -> void:
 			contact_details.text = "方位 %03d° · 距离 %.1f km · %s" % [roundi(MissionController.last_contact_bearing_degrees), MissionController.last_contact_range_km, "已确认" if GameManager.target_identified else "待确认"]
 		else:
 			contact_details.text = "方位 %03d°   距离 %.1f km   观测 T+%02d:%02d   %s" % [roundi(MissionController.last_contact_bearing_degrees), MissionController.last_contact_range_km, floori(float(seen) / 60.0), seen % 60, "稳定" if MissionController.contact_visible else "中断"]
-	selection_details.text = "已选择 A1 · 可下达识别或开火命令" if selected_contact_id == MissionController.CONTACT_ID else "未选择接触 · 点击雷达回波"
+	selection_details.text = "雷达静默 · 开机后可复测接触" if not MissionController.radar_emitting else ("已选择 A1 · 可下达识别或开火命令" if selected_contact_id == MissionController.CONTACT_ID else "未选择接触 · 点击雷达回波")
 
 func _refresh_ship() -> void:
 	ship_details.text = "位置 E %05.1f / S %05.1f km   航向 %03d°\n航速 %.0f / %.0f kn   舰体 %.0f%%   弹药 %d" % [WorldState.ship_position_km.x, WorldState.ship_position_km.y, roundi(WorldState.ship_heading_degrees), WorldState.ship_speed_knots, WorldState.ship_max_speed_knots, MissionController.ship_health, MissionController.ship_ammo]
@@ -247,6 +254,7 @@ func _refresh_radar() -> void:
 	if WorldState.map == null:
 		return
 	radar.set_land_areas(WorldState.map.islands, WorldState.ship_position_km)
+	radar.set_sweep_enabled(MissionController.radar_emitting)
 	radar.set_aircraft(MissionController.aircraft_position_km, MissionController.aircraft_airborne)
 	var relative := MissionController.last_contact_position_km - WorldState.ship_position_km
 	var bearing := fposmod(rad_to_deg(atan2(relative.x, -relative.y)), 360.0)
@@ -264,6 +272,9 @@ func _event_line(event: Dictionary) -> String:
 		"contact_discovered": return "A1 回波发现"
 		"contact_updated": return "A1 方位复测"
 		"contact_lost": return "A1 信号丢失"
+		"radar_emission_changed": return "舰载雷达开启" if details_data.get("emitting", false) else "舰载雷达静默"
+		"enemy_tracking": return "敌方截获舰载雷达" if details_data.get("source", "") == "radar" else "敌舰发现母舰"
+		"enemy_tracking_lost": return "敌舰失去追踪"
 		"target_identified", "aircraft_recon": return "A1 情报确认"
 		"ship_navigation_command": return "航行命令 %03d° / %.0f kn" % [roundi(details_data.get("heading_degrees", 0.0)), details_data.get("speed_knots", 0.0)]
 		"ship_navigation_blocked": return "航路受阻，舰艇停车"

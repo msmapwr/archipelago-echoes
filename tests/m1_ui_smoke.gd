@@ -9,9 +9,10 @@ func _run() -> void:
 	var mission: Node = root.get_node("MissionController")
 	var game: Node = root.get_node("GameManager")
 	var clock: Node = root.get_node("WorldClock")
-	mission.restart_scenario()
-	var main: Control = load("res://scenes/main/crt_main.tscn").instantiate()
-	root.add_child(main)
+	var shell: Control = load("res://scenes/main/console_shell.tscn").instantiate()
+	root.add_child(shell)
+	shell.get_node("StartButton").emit_signal("pressed")
+	var main: Control = shell.get_node("GameCRTSlot").get_child(0)
 	var terminal: Control = main.get_node("ScreenContainer/ScreenViewport/Terminal")
 	var details: VBoxContainer = terminal.get_node("Content/DetailsFrame/DetailsScroll/Details")
 	var radar: Control = terminal.get_node("Content/RadarFrame/Radar")
@@ -21,7 +22,9 @@ func _run() -> void:
 	var click := InputEventMouseButton.new()
 	click.button_index = MOUSE_BUTTON_LEFT
 	click.pressed = true
-	click.position = main.get_node("ScreenContainer").position + radar.get_global_rect().position + radar._contact_position()
+	var logical_position: Vector2 = main.get_node("ScreenContainer").get_global_rect().position + radar.get_global_rect().position + radar._contact_position()
+	var window_scale: Vector2 = Vector2(DisplayServer.window_get_size()) / root.get_visible_rect().size
+	click.position = logical_position * window_scale
 	click.global_position = click.position
 	if DisplayServer.get_name() == "headless":
 		click.position = radar._contact_position()
@@ -33,6 +36,13 @@ func _run() -> void:
 	_check(main.selected_contact_id == "contact.alpha", "radar selection reaches CRT controller")
 	details.get_node("RadarActions/Fire").emit_signal("pressed")
 	_check("尚未确认" in details.get_node("ActionStatus").text, "failed fire explains missing identification")
+	var scans_before_silence: int = mission.contact_scan_count
+	details.get_node("RadarActions/ToggleEmission").emit_signal("pressed")
+	_check(not mission.radar_emitting and not radar.contact_visible and not radar.sweep_enabled, "silent command blanks live echo and freezes sweep")
+	clock.advance(31.0)
+	_check(mission.contact_scan_count == scans_before_silence, "silent radar does not auto-scan")
+	details.get_node("RadarActions/ToggleEmission").emit_signal("pressed")
+	_check(mission.radar_emitting and radar.contact_visible and radar.sweep_enabled, "CRT can restore active radar and contact")
 	terminal.get_node("Footer/PauseStatus").emit_signal("pressed")
 	_check(paused and details.get_node("RadarActions/NextSweep").disabled, "pause freezes scan action")
 	terminal.get_node("Footer/PauseStatus").emit_signal("pressed")
@@ -60,7 +70,7 @@ func _run() -> void:
 	var details_bottom: float = terminal.get_node("Content/DetailsFrame").get_rect().end.y
 	var footer_top: float = terminal.get_node("Footer").get_rect().position.y
 	_check(details_bottom <= footer_top, "CRT details do not overlap footer")
-	main.queue_free()
+	shell.queue_free()
 	mission.restart_scenario()
 	_finish()
 

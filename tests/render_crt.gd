@@ -6,12 +6,21 @@ func _initialize() -> void:
 func _capture() -> void:
 	var mission: Node = root.get_node("MissionController")
 	var clock: Node = root.get_node("WorldClock")
+	var world: Node = root.get_node("WorldState")
 	mission.restart_scenario()
 	var scene: PackedScene = load("res://scenes/main/crt_main.tscn")
 	var main: Control = scene.instantiate()
 	root.add_child(main)
 	var capture_mode := OS.get_environment("CRT_CAPTURE_MODE")
-	if capture_mode == "flight" or capture_mode == "settlement":
+	if capture_mode == "silent":
+		mission.set_radar_emitting(false)
+	elif capture_mode == "intercept":
+		mission.set_radar_emitting(false)
+		world.set_ship_command(42.0, 22.0)
+		clock.advance(970.0)
+		world.set_ship_command(world.ship_heading_degrees, 0.0)
+		mission.set_radar_emitting(true)
+	elif capture_mode == "flight" or capture_mode == "settlement":
 		mission.prepare_sortie()
 		mission.launch_sortie()
 		clock.advance(5.0)

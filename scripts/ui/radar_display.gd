@@ -24,13 +24,20 @@ var aircraft_position_km: Vector2 = Vector2.ZERO
 var aircraft_visible: bool = false
 var contact_confirmed: bool = false
 var sweep_angle_degrees: float = 0.0
+var sweep_enabled: bool = true
 
 func _ready() -> void:
 	WorldClock.time_advanced.connect(_on_world_time_advanced)
 
 func _on_world_time_advanced(total_seconds: float) -> void:
-	sweep_angle_degrees = fposmod(total_seconds * 12.0, 360.0)
-	queue_redraw()
+	if sweep_enabled:
+		sweep_angle_degrees = fposmod(total_seconds * 12.0, 360.0)
+		queue_redraw()
+
+func set_sweep_enabled(is_enabled: bool) -> void:
+	if sweep_enabled != is_enabled:
+		sweep_enabled = is_enabled
+		queue_redraw()
 
 func set_land_areas(areas: Array[Dictionary], position_km: Vector2) -> void:
 	land_areas = areas.duplicate(true)
@@ -92,8 +99,9 @@ func _draw() -> void:
 		draw_arc(center, radius * float(ring) / 4.0, 0.0, TAU, 96, GRID_COLOR, 1.0, true)
 	draw_line(center + Vector2(-radius, 0), center + Vector2(radius, 0), GRID_COLOR, 1.0)
 	draw_line(center + Vector2(0, -radius), center + Vector2(0, radius), GRID_COLOR, 1.0)
-	var sweep_direction := Vector2(sin(deg_to_rad(sweep_angle_degrees)), -cos(deg_to_rad(sweep_angle_degrees)))
-	draw_line(center, center + sweep_direction * radius, Color(0.32, 0.75, 0.49, 0.2), 2.0, true)
+	if sweep_enabled:
+		var sweep_direction := Vector2(sin(deg_to_rad(sweep_angle_degrees)), -cos(deg_to_rad(sweep_angle_degrees)))
+		draw_line(center, center + sweep_direction * radius, Color(0.32, 0.75, 0.49, 0.2), 2.0, true)
 	for tick in range(0, 360, 30):
 		var direction := Vector2(sin(deg_to_rad(float(tick))), -cos(deg_to_rad(float(tick))))
 		draw_line(center + direction * (radius - 9.0), center + direction * radius, GRID_COLOR, 2.0, true)
