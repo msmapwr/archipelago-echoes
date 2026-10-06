@@ -38,11 +38,38 @@ func _run() -> void:
 		release.pressed = false
 		Input.parse_input_event(release)
 	await process_frame
-	_check(not paused and shell.started, "Start enters playable state")
+	_check(paused and not shell.started and shell.session_stage == "opening", "Start enters preparation without starting simulation")
+	var preparation: Control = shell.get_node("GameCRTSlot/Preparation")
+	shell._enter_mission()
+	_check(not shell.started and shell.session_stage == "opening", "mission cannot start before orders and harbor confirmation")
+	var stages := ["opening", "settings", "background", "tutorial", "orders", "generation", "harbor"]
+	for stage in stages:
+		_check(preparation.stage == stage and shell.session_stage == stage, "preparation follows %s" % stage)
+		_check(paused and is_equal_approx(clock.elapsed_seconds, seconds_before), "preparation keeps world time frozen")
+		if stage == "harbor":
+			var data: Node = root.get_node("DataManager")
+			data.errors.append("session_flow_test: unavailable scenario")
+			preparation.advance_button.emit_signal("pressed")
+			_check(paused and not shell.started and shell.session_stage == "harbor" and "失败" in preparation.body.text, "loading error keeps player in preparation with a recovery path")
+			data.errors.erase("session_flow_test: unavailable scenario")
+		preparation.advance_button.emit_signal("pressed")
+	_check(not paused and shell.started and shell.session_stage == "mission", "departure enters playable state")
 	_check(not menu_crt.visible and not shell.get_node("StartButton").visible, "menu gives way to game CRT")
 	var slot: Control = shell.get_node("GameCRTSlot")
 	_check(slot.visible and slot.get_child_count() == 1, "previous CRT is mounted in central slot")
 	_check(slot.get_child_count() == 1 and slot.get_child(0).has_node("ScreenContainer/ScreenViewport/Terminal"), "existing terminal remains accessible")
+	var game: Node = root.get_node("GameManager")
+	game.report_player_death("session_flow_test")
+	var menu_action: Button = slot.get_child(0).get_node("ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details/PhaseActions/MainMenu")
+	_check(shell.session_stage == "failed" and menu_action.visible, "failure exposes return to menu")
+	menu_action.emit_signal("pressed")
+	await process_frame
+	_check(paused and not shell.started and shell.session_stage == "menu" and slot.get_child_count() == 0, "return cleans mission screen and pauses world")
+	shell.get_node("StartButton").emit_signal("pressed")
+	_check(shell.session_stage == "opening", "new session starts preparation from the beginning")
+	shell.get_node("GameCRTSlot/Preparation").menu_requested.emit()
+	await process_frame
+	_check(shell.session_stage == "menu" and slot.get_child_count() == 0, "preparation can be cancelled")
 	if failures.is_empty():
 		print("Console menu smoke test passed")
 		quit(0)

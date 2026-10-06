@@ -1,6 +1,7 @@
 extends Control
 
 const CRT_SCENE: PackedScene = preload("res://scenes/main/crt_main.tscn")
+const PREPARATION_SCRIPT = preload("res://scripts/ui/session_preparation.gd")
 const VOID := Color("#070c0f")
 const SHELL := Color("#252e30")
 const SHELL_LIGHT := Color("#3b4645")
@@ -26,6 +27,7 @@ const RED := Color("#d86d5d")
 @onready var self_test: Label = $MenuCRT/SelfTest
 
 var started: bool = false
+var session_stage: String = "menu"
 var _displayed_second: int = -1
 var _instrument_font: Font
 var _boot_seconds: float = 0.0
@@ -52,6 +54,7 @@ func _ready() -> void:
 	start_button.grab_focus()
 	WorldClock.time_advanced.connect(_on_world_time_advanced)
 	MissionController.state_changed.connect(_refresh_status)
+	EventBus.mode_changed.connect(func(_previous: String, _current: String) -> void: _refresh_status())
 	WorldState.ship_command_changed.connect(func(_heading: float, _speed: float) -> void: _refresh_status())
 	_refresh_status()
 
@@ -103,17 +106,63 @@ func _process(delta: float) -> void:
 	menu_status.text = "SYSTEM 07  /  高压启动中                                        SELF TEST / RUNNING" if phase < 4 else "SYSTEM 07  /  作战情报中心                                         SELF TEST / COMPLETE"
 
 func _start_game() -> void:
-	if started:
+	if session_stage != "menu":
 		return
-	started = true
 	menu_crt.hide()
 	start_button.hide()
+	get_tree().paused = true
+	var preparation := Control.new()
+	preparation.name = "Preparation"
+	preparation.set_script(PREPARATION_SCRIPT)
+	preparation.stage_changed.connect(_on_preparation_stage_changed)
+	preparation.departure_requested.connect(_enter_mission)
+	preparation.menu_requested.connect(_return_to_menu)
+	game_crt_slot.show()
+	game_crt_slot.add_child(preparation)
+
+func _on_preparation_stage_changed(stage: String) -> void:
+	session_stage = stage
+	_refresh_status()
+
+func _enter_mission() -> void:
+	if session_stage != "harbor":
+		return
+	if not DataManager.errors.is_empty() or WorldState.map == null:
+		game_crt_slot.get_child(0).body.text = "场景加载失败，请检查 Godot 输出；可返回主菜单重试。"
+		return
+	_clear_session_screen()
+	started = true
+	session_stage = "mission"
 	MissionController.restart_scenario()
-	game_crt_slot.add_child(CRT_SCENE.instantiate())
+	EventBus.record("command_accepted", {"task_id": GameManager.current_task_id})
+	EventBus.record("harbor_departure", {"prototype": true})
+	var mission_screen := CRT_SCENE.instantiate()
+	mission_screen.menu_requested.connect(_return_to_menu)
+	game_crt_slot.add_child(mission_screen)
 	game_crt_slot.show()
 	aux_status.show()
 	start_caption.text = "SYSTEM  /  ACTIVE"
 	video_monitor.set("active", true)
+	video_monitor.queue_redraw()
+	_refresh_status()
+
+func _clear_session_screen() -> void:
+	for child in game_crt_slot.get_children():
+		game_crt_slot.remove_child(child)
+		child.queue_free()
+
+func _return_to_menu() -> void:
+	_clear_session_screen()
+	started = false
+	session_stage = "menu"
+	get_tree().paused = true
+	game_crt_slot.hide()
+	menu_crt.show()
+	start_button.show()
+	start_button.grab_focus()
+	aux_status.hide()
+	start_caption.text = "SYSTEM / STANDBY"
+	video_monitor.set("active", false)
 	video_monitor.queue_redraw()
 	_refresh_status()
 
@@ -127,6 +176,9 @@ func _refresh_status() -> void:
 	if not is_node_ready():
 		return
 	if started:
+		session_stage = "completed" if GameManager.mode == "settlement" else "failed" if GameManager.mode == "campaign_failed" else "mission"
+		if session_stage == "completed" or session_stage == "failed":
+			get_tree().paused = true
 		top_message.text = "CIC  /  指挥链路已建立     ·     作战情报中心在线"
 		time_value.text = WorldClock.formatted_time()
 		ammo_value.text = "甲板炮 %02d/06   ·   对海弹 %01d/01" % [MissionController.ship_ammo, MissionController.aircraft_bombs]
@@ -134,10 +186,10 @@ func _refresh_status() -> void:
 		hull_value.text = "HULL   %03.0f%%" % MissionController.ship_health
 		aux_status.text = "CIC   /   LIVE\nRADAR /   %s\nLINK  /   STABLE" % ("ACTIVE" if MissionController.radar_emitting else "SILENT")
 	else:
-		top_message.text = "CIC  /  指挥终端待机     ·     等待舰桥授权"
+		top_message.text = "CIC  /  指挥终端待机     ·     等待舰桥授权" if session_stage == "menu" else "CIC  /  出航准备     ·     %s" % session_stage.to_upper()
 		time_value.text = "T+00:00"
 		ammo_value.text = "甲板炮 --/06   ·   对海弹 --/01"
-		mode_value.text = "MODE  /  STANDBY"
+		mode_value.text = "MODE  /  %s" % session_stage.to_upper()
 		hull_value.text = "HULL   ---"
 	queue_redraw()
 

@@ -1,5 +1,7 @@
 extends Control
 
+signal menu_requested
+
 @onready var terminal: Control = $ScreenContainer/ScreenViewport/Terminal
 @onready var radar: Control = terminal.get_node("Content/RadarFrame/Radar")
 @onready var details: VBoxContainer = terminal.get_node("Content/DetailsFrame/DetailsScroll/Details")
@@ -39,6 +41,7 @@ func _ready() -> void:
 	WorldState.ship_command_changed.connect(_on_ship_command_changed)
 	WorldState.navigation_blocked.connect(_on_navigation_blocked)
 	EventBus.event_recorded.connect(_on_event_recorded)
+	EventBus.mode_changed.connect(func(_previous: String, _current: String) -> void: _refresh_ui())
 	if not DataManager.errors.is_empty() or WorldState.map == null:
 		contact_status.text = "系统故障 / DATA ERROR"
 		action_status.text = "请检查 Godot 输出中的数据加载错误"
@@ -72,6 +75,7 @@ func _connect_buttons() -> void:
 	_button("PhaseActions/Land").pressed.connect(func() -> void: MissionController.land_aircraft())
 	_button("PhaseActions/Settle").pressed.connect(func() -> void: MissionController.complete_mission())
 	_button("PhaseActions/Restart").pressed.connect(_on_restart_pressed)
+	_button("PhaseActions/MainMenu").pressed.connect(func() -> void: menu_requested.emit())
 	pause_status.pressed.connect(_toggle_pause)
 	time_scale_button.pressed.connect(_toggle_time_scale)
 	radar_range_button.pressed.connect(_toggle_radar_range)
@@ -235,6 +239,7 @@ func _refresh_ui() -> void:
 	_button("PhaseActions/Land").visible = mode == "returning"
 	_button("PhaseActions/Settle").visible = (mode == "bridge" or mode == "recovered") and GameManager.player_recovered
 	_button("PhaseActions/Restart").visible = mode == "settlement" or mode == "campaign_failed"
+	_button("PhaseActions/MainMenu").visible = mode == "settlement" or mode == "campaign_failed"
 	_button("RadarActions/NextSweep").disabled = get_tree().paused
 	_button("RadarActions/ToggleEmission").disabled = get_tree().paused
 	_button("RadarActions/ToggleEmission").text = "雷达静默" if MissionController.radar_emitting else "开启雷达"

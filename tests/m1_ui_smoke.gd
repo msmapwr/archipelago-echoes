@@ -12,6 +12,8 @@ func _run() -> void:
 	var shell: Control = load("res://scenes/main/console_shell.tscn").instantiate()
 	root.add_child(shell)
 	shell.get_node("StartButton").emit_signal("pressed")
+	for step in range(7):
+		shell.get_node("GameCRTSlot/Preparation").advance()
 	var main: Control = shell.get_node("GameCRTSlot").get_child(0)
 	var terminal: Control = main.get_node("ScreenContainer/ScreenViewport/Terminal")
 	var details: VBoxContainer = terminal.get_node("Content/DetailsFrame/DetailsScroll/Details")
@@ -64,6 +66,7 @@ func _run() -> void:
 	_check(game.mode == "bridge" and game.player_recovered, "landing returns to bridge")
 	details.get_node("PhaseActions/Settle").emit_signal("pressed")
 	_check(game.mode == "settlement" and details.get_node("PhaseActions/Restart").visible, "successful mission offers restart")
+	_check(shell.session_stage == "completed" and paused and details.get_node("PhaseActions/MainMenu").visible, "successful session pauses and offers menu exit")
 	details.get_node("PhaseActions/Restart").emit_signal("pressed")
 	_check(game.mode == "bridge" and not game.target_identified, "restart begins a fresh mission")
 	terminal.get_node("Footer/RadarRange").emit_signal("pressed")

@@ -7,8 +7,15 @@ func _capture() -> void:
 	var shell: Control = load("res://scenes/main/console_shell.tscn").instantiate()
 	root.add_child(shell)
 	var capture_mode := OS.get_environment("CONSOLE_CAPTURE_MODE")
-	if capture_mode == "game" or capture_mode == "damage":
+	if capture_mode == "preparation":
 		shell.get_node("StartButton").emit_signal("pressed")
+		for step in range(4):
+			shell.get_node("GameCRTSlot/Preparation").advance()
+		await create_timer(0.7, true).timeout
+	elif capture_mode == "game" or capture_mode == "damage":
+		shell.get_node("StartButton").emit_signal("pressed")
+		for step in range(7):
+			shell.get_node("GameCRTSlot/Preparation").advance()
 		if capture_mode == "damage":
 			var world: Node = root.get_node("WorldState")
 			var clock: Node = root.get_node("WorldClock")

@@ -426,6 +426,13 @@ layout_mode = 2
 size_flags_horizontal = 3
 text = "重新开始"
 
+[node name="MainMenu" type="Button" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details/PhaseActions"]
+visible = false
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "返回主菜单"
+
 [node name="ActionStatus" type="Label" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details"]
 layout_mode = 2
 autowrap_mode = 3
