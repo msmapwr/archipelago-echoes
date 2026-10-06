@@ -13,6 +13,8 @@ func _run() -> void:
 	root.add_child(shell)
 	shell.get_node("StartButton").emit_signal("pressed")
 	for step in range(7):
+		if shell.get_node("GameCRTSlot/Preparation").stage == "tutorial":
+			shell.get_node("GameCRTSlot/Preparation").tutorial.skip()
 		shell.get_node("GameCRTSlot/Preparation").advance()
 	var harbor: Control = shell.get_node("GameCRTSlot/Harbor")
 	harbor.navigation.cast_off()

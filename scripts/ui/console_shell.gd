@@ -138,6 +138,10 @@ func _open_harbor() -> void:
 	if not DataManager.errors.is_empty() or WorldState.map == null:
 		game_crt_slot.get_child(0).body.text = "场景加载失败，请检查 Godot 输出；可返回主菜单重试。"
 		return
+	var preparation: Control = game_crt_slot.get_child(0)
+	if preparation.accepted_task_id != GameManager.current_task_id or not preparation.generation_ready:
+		preparation.body.text = "命令或生成状态无效，请返回主菜单重新准备。"
+		return
 	_clear_session_screen()
 	session_stage = "harbor_navigation"
 	_displayed_harbor_second = -1

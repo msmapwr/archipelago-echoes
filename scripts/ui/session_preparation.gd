@@ -4,13 +4,13 @@ signal departure_requested
 signal menu_requested
 signal stage_changed(stage: String)
 
-# Narrative/settings slots; the final page hands control to the harbor.
+# The final page hands control to the harbor after a valid command is accepted.
 const PAGES: Array[Dictionary] = [
 	{"id": "opening", "title": "01 / 开场动画", "body": "群岛回波\nECHOES OF THE ARCHIPELAGO\n\n开场影像与音效待制作；当前仅保留 CRT 亮屏过渡。", "action": "进入准备"},
 	{"id": "settings", "title": "02 / 出航设置", "body": "", "action": "继续"},
-	{"id": "background", "title": "03 / 背景介绍", "body": "背景叙事内容待编写\n\n这里将交代群岛局势、玩家身份及此次行动的缘由。\n正式剧情与时代设定尚未定稿。", "action": "继续"},
-	{"id": "tutorial", "title": "04 / 新手教程", "body": "交互教程入口已预留\n\n当前操作提示：点击雷达回波选择接触；主动扫描与确认接触后可使用甲板炮。\n航向和航速由舰桥控制；配置出击后可驾驶飞机侦察并安全返航。\n空格暂停，页脚切换时间倍率。\n后续加入逐步演练与完成检测。", "action": "阅读完毕"},
-	{"id": "orders", "title": "05 / 指令部命令", "body": "首关原型命令\n\n搜索海峡中的 A1 接触，确认其身份，并确保指挥官安全返航。\n先接受命令，再准备舰船与海域，最后从港口出航。\n正式命令文本和任务简报系统待接入。", "action": "接受命令"},
+	{"id": "background", "title": "03 / 背景介绍", "body": "", "action": "进入训练台"},
+	{"id": "tutorial", "title": "04 / 新手教程", "body": "", "action": "继续阅读命令"},
+	{"id": "orders", "title": "05 / 指令部命令", "body": "", "action": "接受命令"},
 	{"id": "generation", "title": "06 / 场景生成", "body": "", "action": "前往港口"},
 	{"id": "harbor", "title": "07 / 港口出航", "body": "命令已接收，舰船在码头待命。\n\n进入港口后先解缆，再加速沿中央航道向北航行。\n港内限速 10 kn，注意码头与防波堤；驶过离港线后自动进入海上首关。\n当前港口采用固定布局，随机生成后续接入。", "action": "进入港口驾驶"},
 ]
@@ -19,6 +19,7 @@ var page_index: int = 0
 var stage: String = "opening"
 var heading: Label
 var body: Label
+var body_scroll: ScrollContainer
 var progress: Label
 var advance_button: Button
 var settings_form: VBoxContainer
@@ -36,6 +37,9 @@ var generate_button: Button
 var random_button: Button
 var generation_status: Label
 var generation_ready: bool = false
+var tutorial: VBoxContainer
+var accepted_task_id: String = ""
+var task: TaskDefinition
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -55,12 +59,12 @@ func _ready() -> void:
 	glass.set_corner_radius_all(22)
 	glass.content_margin_left = 56
 	glass.content_margin_right = 56
-	glass.content_margin_top = 36
-	glass.content_margin_bottom = 36
+	glass.content_margin_top = 24
+	glass.content_margin_bottom = 24
 	panel.add_theme_stylebox_override("panel", glass)
 	add_child(panel)
 	var column := VBoxContainer.new()
-	column.add_theme_constant_override("separation", 24)
+	column.add_theme_constant_override("separation", 14)
 	panel.add_child(column)
 	progress = Label.new()
 	progress.add_theme_color_override("font_color", Color("#83e8aa"))
@@ -69,14 +73,24 @@ func _ready() -> void:
 	heading.add_theme_font_size_override("font_size", 36)
 	heading.add_theme_color_override("font_color", Color("#d9decf"))
 	column.add_child(heading)
+	body_scroll = ScrollContainer.new()
+	body_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	column.add_child(body_scroll)
 	body = Label.new()
+	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	body.add_theme_font_size_override("font_size", 23)
 	body.add_theme_color_override("font_color", Color("#a4c6af"))
-	column.add_child(body)
+	body_scroll.add_child(body)
 	_build_settings_form(column)
 	_build_generation_form(column)
+	tutorial = VBoxContainer.new()
+	tutorial.set_script(preload("res://scripts/ui/tutorial_console.gd"))
+	tutorial.hide()
+	column.add_child(tutorial)
+	tutorial.readiness_changed.connect(_refresh_tutorial_gate)
 	var actions := HBoxContainer.new()
 	actions.add_theme_constant_override("separation", 24)
 	column.add_child(actions)
@@ -93,6 +107,14 @@ func _ready() -> void:
 	create_tween().tween_property(panel, "modulate:a", 1.0, 0.6)
 
 func advance() -> void:
+	if stage == "tutorial" and not tutorial.simulation.ready_to_continue():
+		return
+	if stage == "orders":
+		if not _load_task():
+			body.text = "任务简报无法读取。请返回主菜单重试，并检查 Godot 输出。"
+			advance_button.disabled = true
+			return
+		accepted_task_id = task.id
 	if stage == "generation":
 		seed_input.apply()
 		if not generation_ready:
@@ -109,15 +131,38 @@ func _refresh_page() -> void:
 	progress.text = "CIC / 出航准备    ·    %02d / %02d    ·    模拟时间冻结" % [page_index + 1, PAGES.size()]
 	heading.text = page["title"]
 	body.text = page["body"]
-	body.visible = stage != "settings" and stage != "generation"
+	body_scroll.visible = stage not in ["settings", "generation", "tutorial"]
+	body.visible = body_scroll.visible
+	body_scroll.scroll_vertical = 0
 	settings_form.visible = stage == "settings"
 	generation_form.visible = stage == "generation"
+	tutorial.visible = stage == "tutorial"
 	advance_button.text = page["action"]
 	advance_button.disabled = stage == "generation" and not generation_ready
+	if stage in ["background", "orders"]:
+		if _load_task():
+			body.text = task.background if stage == "background" else _briefing_text()
+		else:
+			body.text = "任务简报无法读取。请返回主菜单重试，并检查 Godot 输出。"
+			advance_button.disabled = true
+	_refresh_tutorial_gate()
 	advance_button.grab_focus()
 	stage_changed.emit(stage)
 	if stage == "generation":
 		generate_world()
+
+func _load_task() -> bool:
+	task = DataManager.definitions.get(GameManager.current_task_id) as TaskDefinition
+	return task != null and DataManager.errors.is_empty() and not task.background.is_empty() and not task.briefing.is_empty() and DataManager.definitions.has(task.ship_id) and DataManager.definitions.has(task.aircraft_id) and DataManager.definitions.has(task.target_contact_id)
+
+func _briefing_text() -> String:
+	var ship: GameDefinition = DataManager.definitions[task.ship_id]
+	var aircraft: GameDefinition = DataManager.definitions[task.aircraft_id]
+	return "%s\n%s\n\n%s\n\n任务目标 / %s\n舰船 / %s    ·    飞机 / %s\n\n%s" % [task.command_source, task.display_name, task.briefing, task.objective, ship.display_name, aircraft.display_name, task.operational_notes]
+
+func _refresh_tutorial_gate() -> void:
+	if stage == "tutorial":
+		advance_button.disabled = not tutorial.simulation.ready_to_continue()
 
 func _form(parent: Node) -> VBoxContainer:
 	var form := VBoxContainer.new()
@@ -212,7 +257,9 @@ func _build_generation_form(parent: Node) -> void:
 func generate_world() -> void:
 	seed_input.apply()
 	generation_ready = false
-	if not DataManager.errors.is_empty():
+	if accepted_task_id.is_empty() or accepted_task_id != GameManager.current_task_id:
+		generation_status.text = "尚未接受有效命令。请返回主菜单重新准备。"
+	elif not DataManager.errors.is_empty():
 		generation_status.text = "数据加载失败，无法生成。请检查 Godot 输出或返回主菜单重试。"
 	elif WorldState.load_first_scenario(int(seed_input.value)):
 		generation_ready = true

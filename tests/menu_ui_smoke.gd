@@ -47,6 +47,9 @@ func _run() -> void:
 	for stage in stages:
 		_check(preparation.stage == stage and shell.session_stage == stage, "preparation follows %s" % stage)
 		_check(paused and is_equal_approx(clock.elapsed_seconds, seconds_before), "preparation keeps world time frozen")
+		if stage == "tutorial":
+			_check(preparation.advance_button.disabled, "unfinished tutorial requires completion or explicit skip")
+			preparation.tutorial.skip_button.emit_signal("pressed")
 		if stage == "harbor":
 			var data: Node = root.get_node("DataManager")
 			data.errors.append("session_flow_test: unavailable scenario")
@@ -97,6 +100,8 @@ func _run() -> void:
 	_check(shell.session_stage == "menu" and slot.get_child_count() == 0, "preparation can be cancelled")
 	shell.get_node("StartButton").emit_signal("pressed")
 	for step in range(7):
+		if shell.get_node("GameCRTSlot/Preparation").stage == "tutorial":
+			shell.get_node("GameCRTSlot/Preparation").tutorial.skip()
 		shell.get_node("GameCRTSlot/Preparation").advance()
 	var cancelled_harbor: Control = shell.get_node("GameCRTSlot/Harbor")
 	cancelled_harbor.navigation.cast_off()
@@ -107,6 +112,8 @@ func _run() -> void:
 	_check(paused and shell.session_stage == "menu" and slot.get_child_count() == 0, "harbor cancellation removes navigation and keeps world frozen")
 	shell.get_node("StartButton").emit_signal("pressed")
 	for step in range(7):
+		if shell.get_node("GameCRTSlot/Preparation").stage == "tutorial":
+			shell.get_node("GameCRTSlot/Preparation").tutorial.skip()
 		shell.get_node("GameCRTSlot/Preparation").advance()
 	var fresh_harbor: Control = shell.get_node("GameCRTSlot/Harbor")
 	_check(fresh_harbor.navigation.moored and fresh_harbor.navigation.position_km == Vector2.ZERO and fresh_harbor.navigation.speed_knots == 0, "new harbor session clears prior voyage")

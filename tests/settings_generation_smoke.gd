@@ -63,6 +63,8 @@ func _run() -> void:
 	settings.preferences = original_preferences
 	original_preferences.apply()
 	for step in range(4):
+		if prep.stage == "tutorial":
+			prep.tutorial.skip()
 		prep.advance()
 	_check(prep.stage == "generation" and prep.generation_ready and paused, "generation validates world while simulation is frozen")
 	prep.seed_input.value = 270930
