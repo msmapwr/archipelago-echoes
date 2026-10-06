@@ -9,3 +9,6 @@ display_name = "海岬号轻型航舰"
 max_speed_knots = 22.0
 aircraft_ids = PackedStringArray("aircraft.kestrel")
 weapon_ids = PackedStringArray("weapon.deck_gun")
+ship_kind = "escort_carrier"
+symbol_id = "ship.haven"
+visual_family_id = "ship.escort_carrier"

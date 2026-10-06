@@ -6,15 +6,23 @@ const GRID_BRIGHT := Color("#407353")
 const PHOSPHOR := Color("#7cff9b")
 const HOT := Color("#d6ffe0")
 const COAST := Color("#4f9366")
+const Decay = preload("res://scripts/ui/phosphor_decay.gd")
+const TARGET_BEARING := 39.29
+const ECHO_LIFETIME_SECONDS := 16.0
 
 var _sweep_degrees: float = 16.0
+var _echo_age: float = 0.0
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	process_mode = Node.PROCESS_MODE_ALWAYS
 
 func _process(delta: float) -> void:
+	_echo_age += delta
+	var crossed := fposmod(TARGET_BEARING - _sweep_degrees, 360.0) <= delta * 23.0
 	_sweep_degrees = fposmod(_sweep_degrees + delta * 23.0, 360.0)
+	if crossed:
+		_echo_age = fposmod(_sweep_degrees - TARGET_BEARING, 360.0) / 23.0
 	queue_redraw()
 
 func _draw() -> void:
@@ -38,11 +46,11 @@ func _draw() -> void:
 	_island(center + Vector2(135, -78), 21.0, 0.56)
 	_draw_sweep(center, radius)
 	var echo := center + Vector2(0.63, -0.77) * radius * 0.57
-	var pulse := 0.68 + 0.32 * sin(float(Time.get_ticks_msec()) * 0.006)
+	var pulse := Decay.energy(_echo_age, ECHO_LIFETIME_SECONDS)
 	draw_circle(echo, 21.0, Color(0.48, 1.0, 0.6, 0.045 * pulse))
 	draw_circle(echo, 13.0, Color(0.48, 1.0, 0.6, 0.1 * pulse))
 	draw_circle(echo, 6.0, Color(0.48, 1.0, 0.6, 0.3 * pulse))
-	draw_circle(echo, 2.8, HOT)
+	draw_circle(echo, 2.8, Color(HOT, pulse))
 	draw_circle(center, 4.0, Color("#88bace"))
 	draw_arc(center, 12.0, 0.0, TAU, 48, Color("#478d8d"), 1.0)
 	var font := ThemeDB.fallback_font

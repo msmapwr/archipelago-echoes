@@ -70,7 +70,7 @@ func _style_start_button() -> void:
 	start_button.add_theme_color_override("font_color", Color("#ffe4c4"))
 	start_button.add_theme_color_override("font_hover_color", Color.WHITE)
 	start_button.add_theme_color_override("font_pressed_color", Color("#301915"))
-	start_button.add_theme_font_size_override("font_size", 25)
+	start_button.add_theme_font_size_override("font_size", 30)
 
 func _button_style(fill: Color, border: Color) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()

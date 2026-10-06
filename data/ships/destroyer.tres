@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ShipDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ship_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "ship.destroyer"
+display_name = "疾风级驱逐舰"
+max_speed_knots = 32.0
+aircraft_ids = PackedStringArray()
+weapon_ids = PackedStringArray("weapon.deck_gun")
+ship_kind = "destroyer"
+size_class = "small"
+symbol_id = "ship.destroyer"
+visual_family_id = "ship.destroyer"

@@ -231,12 +231,12 @@ theme_override_font_sizes/font_size = 17
 text = "COMMAND  /  01"
 
 [node name="StartButton" type="Button" parent="."]
-custom_minimum_size = Vector2(174, 65)
+custom_minimum_size = Vector2(206, 96)
 layout_mode = 1
-offset_left = 1660.0
-offset_top = 746.0
-offset_right = 1833.0
-offset_bottom = 812.0
+offset_left = 1642.0
+offset_top = 728.0
+offset_right = 1848.0
+offset_bottom = 824.0
 focus_mode = 2
 text = "开始游戏"
 

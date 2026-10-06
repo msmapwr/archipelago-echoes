@@ -22,6 +22,8 @@
 
 ## 验证
 
+雷达回波按观测年龄由亮到暗，复测恢复亮度；选择框和标签保持可读。舰艇数据目前含护航航舰、航空母舰、驱逐舰、巡洋舰、战列舰、潜艇六类，各有类别占位符号，首关仍使用原有舰机与武器规则。`scripts/data/unit_visual_catalog.gd` 为每类建筑／战舰的每个小、中、大尺寸预留十个形态 ID；这些槽位尚无完整美术，资源可通过 `symbol_texture`、`silhouette_scene` 接入。形态库与拼装要求见 [总计划](docs/plan.md)。
+
 在仓库根目录运行：
 
 ```powershell
@@ -33,6 +35,7 @@ godot --headless --path . --script res://tests/p1_navigation_smoke.gd
 godot --headless --path . --script res://tests/m1_mission_smoke.gd
 godot --headless --path . --script res://tests/damage_control_smoke.gd
 godot --headless --path . --script res://tests/harbor_navigation_smoke.gd
+godot --headless --path . --script res://tests/radar_visual_smoke.gd
 godot --headless --path . --script res://tests/menu_ui_smoke.gd
 godot --path . --script res://tests/m1_ui_smoke.gd
 ```

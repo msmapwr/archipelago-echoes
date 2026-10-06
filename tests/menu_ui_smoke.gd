@@ -17,6 +17,7 @@ func _run() -> void:
 	_check(is_equal_approx(menu_crt.size.x / menu_crt.size.y, 16.0 / 9.0), "main CRT is 16:9")
 	_check(shell.get_node("GameCRTSlot").get_child_count() == 0, "game CRT is not loaded before Start")
 	_check(shell.get_node("StartButton").visible, "Start is visible")
+	_check(shell.get_node("StartButton").size.x >= 206 and shell.get_node("StartButton").size.y >= 96, "Start has a larger click area")
 	var buttons: Array[Node] = []
 	_collect_buttons(shell, buttons)
 	_check(buttons.size() == 1 and buttons[0] == shell.get_node("StartButton"), "menu has one button")

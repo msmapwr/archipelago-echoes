@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ShipDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ship_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "ship.submarine"
+display_name = "深潮级潜艇"
+max_speed_knots = 18.0
+aircraft_ids = PackedStringArray()
+weapon_ids = PackedStringArray("weapon.deck_gun")
+ship_kind = "submarine"
+size_class = "small"
+symbol_id = "ship.submarine"
+visual_family_id = "ship.submarine"

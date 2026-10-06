@@ -12,6 +12,8 @@ const HOT := Color("#d6ffe0")
 const AMBER := Color("#e7b66c")
 const OWN_SHIP := Color("#83bad1")
 const ECHO_LIFETIME_SECONDS := 95.0
+const Decay = preload("res://scripts/ui/phosphor_decay.gd")
+const Symbols = preload("res://scripts/data/unit_visual_catalog.gd")
 
 var contact_id: String = ""
 var contact_visible: bool = false
@@ -183,7 +185,7 @@ func _draw_echoes(center: Vector2, radius: float) -> void:
 		if offset.length() > display_range_km:
 			continue
 		var age: float = maxf(0.0, WorldClock.elapsed_seconds - float(echo["time"]))
-		var energy: float = pow(1.0 - age / ECHO_LIFETIME_SECONDS, 1.7) * float(echo["strength"])
+		var energy: float = Decay.energy(age, ECHO_LIFETIME_SECONDS) * float(echo["strength"])
 		if energy <= 0.0:
 			continue
 		var point := center + offset * radius / display_range_km
@@ -207,6 +209,10 @@ func _draw_ownship(center: Vector2, radius: float) -> void:
 	var direction := Vector2(sin(deg_to_rad(own_heading_degrees)), -cos(deg_to_rad(own_heading_degrees)))
 	draw_line(center, center + direction * 28.0, OWN_SHIP, 2.0, true)
 	draw_circle(center, 4.0, Color("#b7dbe0"))
+	var task: TaskDefinition = DataManager.get_definition(GameManager.current_task_id) as TaskDefinition
+	var ship: ShipDefinition = DataManager.get_definition(task.ship_id) as ShipDefinition if task != null else null
+	if ship != null:
+		_draw_unit_symbol(center, ship.visual_family_id, OWN_SHIP, own_heading_degrees, ship.symbol_texture)
 	draw_arc(center, 12.0, 0.0, TAU, 32, Color("#3c7977"), 1.0)
 	if aircraft_visible:
 		var offset := aircraft_position_km - own_position_km
@@ -214,16 +220,36 @@ func _draw_ownship(center: Vector2, radius: float) -> void:
 			var point := center + offset * radius / display_range_km
 			draw_colored_polygon(PackedVector2Array([point + Vector2(0, -8), point + Vector2(-6, 6), point + Vector2(6, 6)]), OWN_SHIP)
 
+func contact_energy() -> float:
+	return Decay.energy(WorldClock.elapsed_seconds - MissionController.last_contact_seconds, ECHO_LIFETIME_SECONDS)
+
+func _draw_unit_symbol(point: Vector2, family: String, tint: Color, heading: float = 0.0, texture: Texture2D = null) -> void:
+	if texture != null:
+		draw_set_transform(point, deg_to_rad(heading))
+		draw_texture_rect(texture, Rect2(-12, -12, 24, 24), false, tint)
+		draw_set_transform(Vector2.ZERO)
+		return
+	var outline := Symbols.symbol_outline(family)
+	for index in range(outline.size()):
+		outline[index] = point + outline[index].rotated(deg_to_rad(heading))
+	draw_polyline(outline, tint, 1.5, true)
+
 func _draw_contact(_center: Vector2, _radius: float) -> void:
 	if not contact_visible:
 		return
 	var point := _contact_position()
-	var strength := clampf(float(MissionController.contact_scan_count) / 3.0, 0.38, 1.0)
+	var strength := contact_energy()
 	var tint := AMBER if contact_selected_state else PHOSPHOR
 	draw_circle(point, 22.0, Color(tint, 0.045 * strength))
 	draw_circle(point, 12.0, Color(tint, 0.10 * strength))
 	draw_circle(point, 6.0, Color(tint, 0.3 * strength))
-	draw_circle(point, 3.2, HOT if contact_confirmed else tint)
+	draw_circle(point, 3.2, Color(HOT if contact_confirmed else tint, strength))
+	if contact_confirmed:
+		var contact: ContactDefinition = DataManager.get_definition(contact_id) as ContactDefinition
+		if contact != null and not contact.identified_ship_id.is_empty():
+			var ship: ShipDefinition = DataManager.get_definition(contact.identified_ship_id) as ShipDefinition
+			if ship != null:
+				_draw_unit_symbol(point, ship.visual_family_id, Color(tint, strength), 0.0, ship.symbol_texture)
 	if contact_selected_state:
 		draw_arc(point, 17.0, 0.0, TAU, 40, AMBER, 1.5, true)
 	if contact_confirmed or contact_selected_state:

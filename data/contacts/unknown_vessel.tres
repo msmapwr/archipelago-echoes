@@ -9,3 +9,4 @@ display_name = "未知水面接触"
 bearing_degrees = 42.0
 range_km = 18.0
 faction_id = "unknown"
+identified_ship_id = "ship.destroyer"

@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ShipDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ship_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "ship.battleship"
+display_name = "镇海级战列舰"
+max_speed_knots = 24.0
+aircraft_ids = PackedStringArray()
+weapon_ids = PackedStringArray("weapon.deck_gun")
+ship_kind = "battleship"
+size_class = "large"
+symbol_id = "ship.battleship"
+visual_family_id = "ship.battleship"
