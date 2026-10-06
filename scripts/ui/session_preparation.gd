@@ -4,7 +4,7 @@ signal departure_requested
 signal menu_requested
 signal stage_changed(stage: String)
 
-# Content slots only: port navigation and procedural generation arrive later.
+# Narrative/settings slots; the final page hands control to the harbor.
 const PAGES: Array[Dictionary] = [
 	{"id": "opening", "title": "01 / 开场动画", "body": "群岛回波\nECHOES OF THE ARCHIPELAGO\n\n开场影像与音效待制作；当前仅保留 CRT 亮屏过渡。", "action": "进入准备"},
 	{"id": "settings", "title": "02 / 出航设置", "body": "设置入口已预留\n\n后续接入音量、显示与操作设置。当前沿用项目默认配置：16:9 画面、键鼠操作。\n本页暂不修改或保存设置。", "action": "继续"},
@@ -12,7 +12,7 @@ const PAGES: Array[Dictionary] = [
 	{"id": "tutorial", "title": "04 / 新手教程", "body": "交互教程入口已预留\n\n当前操作提示：点击雷达回波选择接触；主动扫描与确认接触后可使用甲板炮。\n航向和航速由舰桥控制；配置出击后可驾驶飞机侦察并安全返航。\n空格暂停，页脚切换时间倍率。\n后续加入逐步演练与完成检测。", "action": "阅读完毕"},
 	{"id": "orders", "title": "05 / 指令部命令", "body": "首关原型命令\n\n搜索海峡中的 A1 接触，确认其身份，并确保指挥官安全返航。\n先接受命令，再准备舰船与海域，最后从港口出航。\n正式命令文本和任务简报系统待接入。", "action": "接受命令"},
 	{"id": "generation", "title": "06 / 场景生成", "body": "场景生成接口已预留\n\n当前出航将载入已有固定首关地图与舰机配置。\n后续在此接入种子、海域生成、港口与舰船初始化，以及加载进度和失败重试。\n目前不执行随机生成。", "action": "前往港口"},
-	{"id": "harbor", "title": "07 / 港口出航", "body": "港口驾驶阶段已预留\n\n命令已接收，等待出航确认。\n港口地图、解缆与驶出航道尚未实现；当前确认后进入已有海上首关。\n后续以实际驶离港口触发正式任务。", "action": "确认出航（原型）"},
+	{"id": "harbor", "title": "07 / 港口出航", "body": "命令已接收，舰船在码头待命。\n\n进入港口后先解缆，再加速沿中央航道向北航行。\n港内限速 10 kn，注意码头与防波堤；驶过离港线后自动进入海上首关。\n当前港口采用固定布局，随机生成后续接入。", "action": "进入港口驾驶"},
 ]
 
 var page_index: int = 0

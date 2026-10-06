@@ -2,6 +2,7 @@ extends Control
 
 const CRT_SCENE: PackedScene = preload("res://scenes/main/crt_main.tscn")
 const PREPARATION_SCRIPT = preload("res://scripts/ui/session_preparation.gd")
+const HARBOR_SCRIPT = preload("res://scripts/ui/harbor_screen.gd")
 const VOID := Color("#070c0f")
 const SHELL := Color("#252e30")
 const SHELL_LIGHT := Color("#3b4645")
@@ -29,6 +30,7 @@ const RED := Color("#d86d5d")
 var started: bool = false
 var session_stage: String = "menu"
 var _displayed_second: int = -1
+var _displayed_harbor_second: int = -1
 var _instrument_font: Font
 var _boot_seconds: float = 0.0
 var _boot_phase: int = -1
@@ -85,6 +87,12 @@ func _button_style(fill: Color, border: Color) -> StyleBoxFlat:
 	return style
 
 func _process(delta: float) -> void:
+	if session_stage == "harbor_navigation":
+		var harbor: Control = game_crt_slot.get_node("Harbor")
+		var second := floori(harbor.navigation.elapsed_seconds)
+		if second != _displayed_harbor_second:
+			_displayed_harbor_second = second
+			_refresh_status()
 	if started or _boot_seconds >= 2.2:
 		return
 	_boot_seconds += delta
@@ -115,7 +123,7 @@ func _start_game() -> void:
 	preparation.name = "Preparation"
 	preparation.set_script(PREPARATION_SCRIPT)
 	preparation.stage_changed.connect(_on_preparation_stage_changed)
-	preparation.departure_requested.connect(_enter_mission)
+	preparation.departure_requested.connect(_open_harbor)
 	preparation.menu_requested.connect(_return_to_menu)
 	game_crt_slot.show()
 	game_crt_slot.add_child(preparation)
@@ -124,18 +132,42 @@ func _on_preparation_stage_changed(stage: String) -> void:
 	session_stage = stage
 	_refresh_status()
 
-func _enter_mission() -> void:
+func _open_harbor() -> void:
 	if session_stage != "harbor":
 		return
 	if not DataManager.errors.is_empty() or WorldState.map == null:
 		game_crt_slot.get_child(0).body.text = "场景加载失败，请检查 Godot 输出；可返回主菜单重试。"
 		return
 	_clear_session_screen()
+	session_stage = "harbor_navigation"
+	_displayed_harbor_second = -1
+	var harbor := Control.new()
+	harbor.name = "Harbor"
+	harbor.set_script(HARBOR_SCRIPT)
+	harbor.departure_reached.connect(_enter_mission)
+	harbor.menu_requested.connect(_return_to_menu)
+	game_crt_slot.add_child(harbor)
+	_refresh_status()
+
+func _enter_mission() -> void:
+	if session_stage != "harbor_navigation":
+		return
+	var harbor: Control = game_crt_slot.get_node("Harbor")
+	if not harbor.navigation.departed:
+		return
+	var departure_position: Vector2 = WorldState.map.ship_start_km + harbor.navigation.position_km
+	var departure_heading: float = harbor.navigation.heading_degrees
+	var departure_speed: float = harbor.navigation.speed_knots
+	var harbor_seconds: float = harbor.navigation.elapsed_seconds
+	_clear_session_screen()
 	started = true
 	session_stage = "mission"
 	MissionController.restart_scenario()
+	WorldState.ship_position_km = departure_position
+	WorldState.set_ship_command(departure_heading, departure_speed)
+	WorldState.ship_position_changed.emit(departure_position)
 	EventBus.record("command_accepted", {"task_id": GameManager.current_task_id})
-	EventBus.record("harbor_departure", {"prototype": true})
+	EventBus.record("harbor_departure", {"position_km": departure_position, "harbor_seconds": harbor_seconds})
 	var mission_screen := CRT_SCENE.instantiate()
 	mission_screen.menu_requested.connect(_return_to_menu)
 	game_crt_slot.add_child(mission_screen)
@@ -185,6 +217,14 @@ func _refresh_status() -> void:
 		mode_value.text = "MODE  /  %s" % GameManager.mode.to_upper()
 		hull_value.text = "HULL   %03.0f%%" % MissionController.ship_health
 		aux_status.text = "CIC   /   LIVE\nRADAR /   %s\nLINK  /   STABLE" % ("ACTIVE" if MissionController.radar_emitting else "SILENT")
+	elif session_stage == "harbor_navigation":
+		var harbor: Control = game_crt_slot.get_node("Harbor")
+		var seconds := floori(harbor.navigation.elapsed_seconds)
+		top_message.text = "CIC  /  港口航行     ·     命令已接收，等待驶离航道"
+		time_value.text = "P+%02d:%02d" % [floori(float(seconds) / 60.0), seconds % 60]
+		ammo_value.text = "甲板炮 --/06   ·   对海弹 --/01"
+		mode_value.text = "MODE  /  HARBOR"
+		hull_value.text = "HULL   ---"
 	else:
 		top_message.text = "CIC  /  指挥终端待机     ·     等待舰桥授权" if session_stage == "menu" else "CIC  /  出航准备     ·     %s" % session_stage.to_upper()
 		time_value.text = "T+00:00"
@@ -235,8 +275,13 @@ func _draw_instrument_bank() -> void:
 	_panel(Rect2(62, 165, 226, 729), Color("#121b1c"), Color("#65746c"))
 	draw_rect(Rect2(69, 171, 212, 35), Color("#263230"))
 	draw_line(Vector2(70, 207), Vector2(280, 207), Color("#59675f"), 1.0)
-	_draw_gauge(Vector2(175, 284), "HEADING", 0.25 if not started else WorldState.ship_heading_degrees / 360.0, "---" if not started else "%03.0f°" % WorldState.ship_heading_degrees, AMBER)
-	_draw_gauge(Vector2(175, 499), "SPEED", 0.0 if not started else WorldState.ship_speed_knots / maxf(1.0, WorldState.ship_max_speed_knots), "--" if not started else "%02.0f kn" % WorldState.ship_speed_knots, PHOSPHOR)
+	var harbor: Control = game_crt_slot.get_node_or_null("Harbor")
+	var navigating := started or harbor != null
+	var heading: float = harbor.navigation.heading_degrees if harbor != null else WorldState.ship_heading_degrees
+	var speed: float = harbor.navigation.speed_knots if harbor != null else WorldState.ship_speed_knots
+	var max_speed: float = 10.0 if harbor != null else maxf(1.0, WorldState.ship_max_speed_knots)
+	_draw_gauge(Vector2(175, 284), "HEADING", heading / 360.0 if navigating else 0.25, "%03.0f°" % heading if navigating else "---", AMBER)
+	_draw_gauge(Vector2(175, 499), "SPEED", speed / max_speed if navigating else 0.0, "%02.0f kn" % speed if navigating else "--", PHOSPHOR)
 	_draw_gauge(Vector2(175, 714), "HULL", 1.0 if not started else MissionController.ship_health / 100.0, "---" if not started else "%03.0f%%" % MissionController.ship_health, PHOSPHOR if not started or MissionController.ship_health >= 50.0 else RED)
 
 func _draw_gauge(center: Vector2, label: String, fraction: float, readout: String, accent: Color) -> void:

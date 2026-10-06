@@ -12,10 +12,20 @@ func _capture() -> void:
 		for step in range(4):
 			shell.get_node("GameCRTSlot/Preparation").advance()
 		await create_timer(0.7, true).timeout
-	elif capture_mode == "game" or capture_mode == "damage":
+	elif capture_mode == "harbor" or capture_mode == "game" or capture_mode == "damage":
 		shell.get_node("StartButton").emit_signal("pressed")
 		for step in range(7):
 			shell.get_node("GameCRTSlot/Preparation").advance()
+		var harbor: Control = shell.get_node("GameCRTSlot/Harbor")
+		if capture_mode == "harbor":
+			harbor.navigation.cast_off()
+			harbor.navigation.set_command(0.0, 6.0)
+			harbor.advance_navigation(30.0)
+			harbor.toggle_pause()
+		else:
+			harbor.navigation.cast_off()
+			harbor.navigation.set_command(0.0, 10.0)
+			harbor.advance_navigation(100.0)
 		if capture_mode == "damage":
 			var world: Node = root.get_node("WorldState")
 			var clock: Node = root.get_node("WorldClock")

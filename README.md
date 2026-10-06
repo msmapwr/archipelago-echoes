@@ -1,10 +1,10 @@
 # 群岛回波 / Echoes of the Archipelago
 
-使用 Godot 4.7.2 开发的海空战术游戏原型。主场景是 16:9 的舰桥作战情报中心：中央是单色雷达与字符 CRT，旁边有机械仪表、彩色档案监视器和纸质航海图。菜单经过短暂的设备自检后，仅提供“开始游戏”按钮；点击后，首关战术终端接管中央 CRT，可搜索接触、识别或交火、驾驶侦察机、返航并结算。布局参考 [UI SVG 草图](docs/reference/ui_wireframe_redraw.svg)，视觉规则见 [游戏美学计划](docs/archipelago_echoes_aesthetic_plan.md)，阶段与后续工作见 [详细开发计划](docs/development-plan.md)。
+使用 Godot 4.7.2 开发的海空战术游戏原型。主场景是 16:9 的舰桥作战情报中心：中央是单色雷达与字符 CRT，旁边有机械仪表、彩色档案监视器和纸质航海图。菜单经过短暂的设备自检后，仅提供“开始游戏”按钮；点击后依次进入准备流程和港口驾驶，驶离港口后由首关战术终端接管中央 CRT，可搜索接触、识别或交火、驾驶侦察机、返航并结算。布局参考 [UI SVG 草图](docs/reference/ui_wireframe_redraw.svg)，视觉规则见 [游戏美学计划](docs/archipelago_echoes_aesthetic_plan.md)，阶段与后续工作见 [详细开发计划](docs/development-plan.md)。
 
 ## 运行与首关操作
 
-1. 使用 Godot 4.7.2 标准版导入根目录的 `project.godot`，运行项目，在主界面点击“开始游戏”。窗口缩放时画面保持 16:9。
+1. 使用 Godot 4.7.2 标准版导入根目录的 `project.godot`，运行项目，在主界面点击“开始游戏”，依次完成准备页并驾驶离港。窗口缩放时画面保持 16:9。
 2. 在中央 CRT 的舰桥界面点击雷达回波选择 A1；执行两次有效扫描后可确认目标。也可以出击，在距离目标 3 km 内目视侦察完成确认。
 3. 舰桥可调整航向、航速；甲板炮要求目标已确认、位于 10 km 内及舰艏两侧各 70° 射界内，且接触情报未过期。雷达上的扇形线标示武器范围，火控栏显示限制与装填倒计时。敌舰会巡逻并在接近后还击。
 4. 点击“配置出击”与“开始出击”，等待指挥权移交；飞机可调整航向或导航至 A1、母舰、机场，在 2 km 内执行一次对海攻击。
@@ -18,7 +18,7 @@
 
 ## 游戏流程
 
-点击“开始游戏”后依次进入开场、设置、背景、新手教程、指令部命令、生成和港口出航准备；这些页面目前是内容占位，准备时世界暂停，确认出航才进入现有首关。成功结算或失败后可返回主菜单，也可直接重试首关。设置保存、随机生成和实际港口驾驶尚未实现，后续接入位置见 [完整游戏流程](docs/game-session-flow.md)。
+点击“开始游戏”后依次进入开场、设置、背景、新手教程、指令部命令、生成和港口出航准备；动画与设置等内容仍预留，准备时世界暂停。进入港口后点击“解缆”，以航向按钮和加减速按钮驾驶舰船；港内限速 10 kn，沿中央航道向北驶过 320 m 外的离港线，才自动启动首关。码头、防波堤和港区边界会阻挡航行并停车，可调整航向后重试。港内支持暂停、×1／×10 时间与返回菜单，海上敌人和任务时钟保持冻结；离港后位置、航向和速度继续沿用。成功结算或失败后可返回主菜单，也可直接重试首关。设置保存与随机生成尚未实现，见 [完整游戏流程](docs/game-session-flow.md)。
 
 ## 验证
 
@@ -32,6 +32,7 @@ godot --headless --path . --script res://tests/p1_world_smoke.gd
 godot --headless --path . --script res://tests/p1_navigation_smoke.gd
 godot --headless --path . --script res://tests/m1_mission_smoke.gd
 godot --headless --path . --script res://tests/damage_control_smoke.gd
+godot --headless --path . --script res://tests/harbor_navigation_smoke.gd
 godot --headless --path . --script res://tests/menu_ui_smoke.gd
 godot --path . --script res://tests/m1_ui_smoke.gd
 ```

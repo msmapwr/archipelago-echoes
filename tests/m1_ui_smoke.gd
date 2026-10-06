@@ -14,6 +14,11 @@ func _run() -> void:
 	shell.get_node("StartButton").emit_signal("pressed")
 	for step in range(7):
 		shell.get_node("GameCRTSlot/Preparation").advance()
+	var harbor: Control = shell.get_node("GameCRTSlot/Harbor")
+	harbor.navigation.cast_off()
+	harbor.navigation.set_command(0.0, 10.0)
+	harbor.advance_navigation(100.0)
+	root.get_node("WorldState").set_ship_command(0.0, 0.0)
 	var main: Control = shell.get_node("GameCRTSlot").get_child(0)
 	var terminal: Control = main.get_node("ScreenContainer/ScreenViewport/Terminal")
 	var details: VBoxContainer = terminal.get_node("Content/DetailsFrame/DetailsScroll/Details")
