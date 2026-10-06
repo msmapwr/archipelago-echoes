@@ -57,6 +57,7 @@ func _connect_buttons() -> void:
 	_button("ShipControls/HeadingControls/TurnStarboard").pressed.connect(func() -> void: WorldState.set_ship_command(WorldState.ship_heading_degrees + 15.0, WorldState.ship_speed_knots))
 	_button("ShipControls/SpeedControls/SlowDown").pressed.connect(func() -> void: WorldState.set_ship_command(WorldState.ship_heading_degrees, maxf(0.0, WorldState.ship_speed_knots - 5.0)))
 	_button("ShipControls/SpeedControls/SpeedUp").pressed.connect(func() -> void: WorldState.set_ship_command(WorldState.ship_heading_degrees, minf(WorldState.ship_max_speed_knots, WorldState.ship_speed_knots + 5.0)))
+	_button("ShipControls/DamageControl/Repair").pressed.connect(func() -> void: MissionController.start_damage_control())
 	_button("FlightControls/FlightHeadingControls/FlightPort").pressed.connect(func() -> void: MissionController.set_aircraft_heading(MissionController.aircraft_heading_degrees - 15.0))
 	_button("FlightControls/FlightHeadingControls/FlightStarboard").pressed.connect(func() -> void: MissionController.set_aircraft_heading(MissionController.aircraft_heading_degrees + 15.0))
 	_button("FlightControls/FlightNavControls/NavContact").pressed.connect(func() -> void: MissionController.set_aircraft_destination("contact"))
@@ -114,13 +115,13 @@ func _apply_theme() -> void:
 		var action := _button(path)
 		action.add_theme_stylebox_override("normal", _button_style(Color("#3b3423"), Color("#9b8658")))
 		action.add_theme_color_override("font_color", Color("#e5d6ac"))
-	var details_scroll: ScrollContainer = terminal.get_node("Content/DetailsFrame/DetailsScroll")
-	details_scroll.get_v_scroll_bar().custom_minimum_size.x = 7.0
 
 func _scroll_style(fill: Color) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
 	style.bg_color = fill
 	style.set_corner_radius_all(2)
+	style.content_margin_left = 4.0
+	style.content_margin_right = 4.0
 	return style
 
 func _button_style(background: Color, border: Color) -> StyleBoxFlat:
@@ -277,6 +278,12 @@ func _refresh_contact() -> void:
 func _refresh_ship() -> void:
 	ship_details.text = "航向 %03d°   航速 %.0f / %.0f kn   舰体 %.0f%%\n位置 E %05.1f / S %05.1f km   弹药 %d" % [roundi(WorldState.ship_heading_degrees), WorldState.ship_speed_knots, WorldState.ship_max_speed_knots, MissionController.ship_health, WorldState.ship_position_km.x, WorldState.ship_position_km.y, MissionController.ship_ammo]
 	radar.set_ship_heading(WorldState.ship_heading_degrees)
+	var repairing := MissionController.repair_seconds_remaining > 0.0
+	ship_controls.get_node("DamageControl").visible = MissionController.ship_health < 100.0 or repairing
+	ship_controls.get_node("DamageControl/Status").text = "损管 / %.0f 秒 · 余 %d 组" % [ceilf(MissionController.repair_seconds_remaining), MissionController.repair_teams] if repairing else "损管 / 余 %d 组待命" % MissionController.repair_teams
+	if not repairing and MissionController.repair_teams == 0:
+		ship_controls.get_node("DamageControl/Status").text = "损管 / 本关资源已耗尽"
+	_button("ShipControls/DamageControl/Repair").disabled = repairing or MissionController.repair_teams == 0 or get_tree().paused or GameManager.mode != "bridge"
 
 func _refresh_flight() -> void:
 	var contact_distance := MissionController.aircraft_position_km.distance_to(WorldState.contact_position_km)
@@ -285,6 +292,7 @@ func _refresh_flight() -> void:
 	var destination_names := {"manual": "手动", "contact": "A1", "ship": "母舰", "airfield": "机场"}
 	flight_details.text = "位置 E %05.1f / S %05.1f km   航向 %03d°\n燃油 %.0f 分   对海弹 %d   导航 %s\nA1 %.1f km  母舰 %.1f km  机场 %.1f km" % [MissionController.aircraft_position_km.x, MissionController.aircraft_position_km.y, roundi(MissionController.aircraft_heading_degrees), MissionController.aircraft_fuel_seconds / 60.0, MissionController.aircraft_bombs, destination_names.get(MissionController.aircraft_destination, "未知"), contact_distance, ship_distance, airfield_distance]
 	_button("FlightControls/FlightNavControls/NavShip").disabled = not GameManager.ship_afloat
+	flight_details.text += "\n母舰 %.0f%% · 损管 %s" % [MissionController.ship_health, "剩余 %.0f 秒" % ceilf(MissionController.repair_seconds_remaining) if MissionController.repair_seconds_remaining > 0.0 else "待命 %d 组" % MissionController.repair_teams]
 
 func _refresh_debrief() -> void:
 	var outcome := "任务完成" if GameManager.mode == "settlement" else "战役失败"
@@ -324,6 +332,9 @@ func _event_line(event: Dictionary) -> String:
 		"aircraft_attack": return "飞机对海攻击 A1"
 		"enemy_damaged": return "A1 受损 %.0f%%" % (100.0 - details_data.get("health", 100.0))
 		"ship_damaged": return "母舰受损 · 舰体 %.0f%%" % details_data.get("health", 0.0)
+		"damage_control_started": return "损管队投入 · 甲板炮停用 30 秒"
+		"damage_control_completed": return "损管完成 · 舰体 %.0f%%" % details_data.get("health", 0.0)
+		"damage_control_aborted": return "母舰沉没，损管终止"
 		"aircraft_launched": return "隼影侦察机升空"
 		"aircraft_landed": return "飞机安全回收"
 		"enemy_destroyed": return "A1 失去战斗力"

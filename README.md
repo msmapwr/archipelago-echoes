@@ -14,6 +14,8 @@
 
 页脚“量程”切换 12.5 / 25 km 雷达显示。近距档放大附近目标，远处接触暂不显示；切换回搜索档即可重新选择。此操作不改变雷达探测范围。规则与限制见 [雷达距离档与舰炮射界](docs/p2-fire-control.md)。
 
+母舰受损后，舰桥会显示“投入损管队”。先减速至不超过 12 kn；每关可投入两次，每次修理 30 模拟秒，恢复最多 20% 舰体。修理期间甲板炮停用，敌方仍能攻击；亲自出击后损管继续。暂停会冻结修理进度，沉没则终止修理。
+
 ## 验证
 
 在仓库根目录运行：
@@ -25,6 +27,7 @@ godot --headless --path . --script res://tests/p0_smoke.gd
 godot --headless --path . --script res://tests/p1_world_smoke.gd
 godot --headless --path . --script res://tests/p1_navigation_smoke.gd
 godot --headless --path . --script res://tests/m1_mission_smoke.gd
+godot --headless --path . --script res://tests/damage_control_smoke.gd
 godot --headless --path . --script res://tests/menu_ui_smoke.gd
 godot --path . --script res://tests/m1_ui_smoke.gd
 ```

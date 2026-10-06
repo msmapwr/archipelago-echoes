@@ -270,6 +270,22 @@ text = "航行控制待命"
 theme_override_font_sizes/font_size = 15
 theme_override_colors/font_color = Color(0.91, 0.686, 0.345, 1)
 
+[node name="DamageControl" type="HBoxContainer" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details/ShipControls"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Status" type="Label" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details/ShipControls/DamageControl"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 15
+theme_override_colors/font_color = Color(0.91, 0.73, 0.45, 1)
+text = "损管 / 2 组待命"
+
+[node name="Repair" type="Button" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details/ShipControls/DamageControl"]
+layout_mode = 2
+text = "投入损管队"
+tooltip_text = "低于或等于 12 kn 时可投入；30 秒后恢复最多 20% 舰体，期间甲板炮停用。每关两次。"
+
 [node name="FlightControls" type="VBoxContainer" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details"]
 visible = false
 layout_mode = 2

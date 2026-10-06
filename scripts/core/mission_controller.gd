@@ -9,6 +9,8 @@ const SCAN_RANGE_KM := 25.0
 const RECON_RANGE_KM := 3.0
 const GUN_DAMAGE := 50.0
 const GUN_HALF_ARC_DEGREES := 70.0
+const REPAIR_SECONDS := 30.0
+const REPAIR_AMOUNT := 20.0
 const ENEMY_DAMAGE := 20.0
 const RADAR_INTERCEPT_RANGE_KM := 14.0
 const ENEMY_GUN_RANGE_KM := 10.0
@@ -27,6 +29,8 @@ var last_contact_seconds: float = 0.0
 var ship_health: float = 100.0
 var ship_ammo: int = 6
 var next_ship_fire_seconds: float = 0.0
+var repair_teams: int = 2
+var repair_seconds_remaining: float = 0.0
 var enemy_health: float = 100.0
 var enemy_alive: bool = true
 var enemy_heading_degrees: float = 90.0
@@ -73,6 +77,8 @@ func _initialize_scenario() -> void:
 	ship_health = 100.0
 	ship_ammo = 6
 	next_ship_fire_seconds = 0.0
+	repair_teams = 2
+	repair_seconds_remaining = 0.0
 	enemy_health = 100.0
 	enemy_alive = true
 	enemy_heading_degrees = 90.0
@@ -185,6 +191,8 @@ func ship_gun_block_reason(contact_id: String) -> String:
 		return "没有可射击的已选接触"
 	if not GameManager.target_identified:
 		return "目标尚未确认，禁止开火"
+	if repair_seconds_remaining > 0.0:
+		return "损管作业中，甲板炮暂时停用"
 	if ship_ammo <= 0:
 		return "甲板炮弹药耗尽"
 	if WorldClock.elapsed_seconds < next_ship_fire_seconds:
@@ -202,6 +210,38 @@ func ship_gun_block_reason(contact_id: String) -> String:
 	if not WorldState.map.can_navigate_segment(WorldState.ship_position_km, WorldState.contact_position_km):
 		return "岛屿遮挡射线"
 	return ""
+
+func start_damage_control() -> bool:
+	if GameManager.mode != "bridge" or not GameManager.ship_afloat:
+		return _reject("损管命令仅可在未沉没母舰的舰桥下达")
+	if get_tree().paused:
+		return _reject("模拟暂停，无法投入损管队")
+	if repair_seconds_remaining > 0.0:
+		return _reject("损管作业已经进行中")
+	if ship_health >= 100.0:
+		return _reject("舰体完好，无需损管")
+	if repair_teams <= 0:
+		return _reject("本关损管队已耗尽")
+	if WorldState.ship_speed_knots > 12.0:
+		return _reject("请减速至不超过 12 kn 再投入损管队")
+	repair_teams -= 1
+	repair_seconds_remaining = REPAIR_SECONDS
+	EventBus.record("damage_control_started", {"teams_remaining": repair_teams, "duration": REPAIR_SECONDS})
+	state_changed.emit()
+	return _accept("损管队已投入：30 秒内甲板炮停用，母舰仍可能遭受攻击")
+
+func _advance_damage_control(delta: float) -> void:
+	if repair_seconds_remaining <= 0.0:
+		return
+	if not GameManager.ship_afloat:
+		repair_seconds_remaining = 0.0
+		EventBus.record("damage_control_aborted", {"reason": "ship_sunk"})
+		return
+	repair_seconds_remaining = maxf(0.0, repair_seconds_remaining - delta)
+	if repair_seconds_remaining == 0.0:
+		ship_health = minf(100.0, ship_health + REPAIR_AMOUNT)
+		EventBus.record("damage_control_completed", {"health": ship_health})
+		_feedback("损管完成：舰体 %.0f%%，甲板炮恢复可用" % ship_health)
 
 func prepare_sortie() -> bool:
 	if GameManager.mode != "bridge" or not GameManager.ship_afloat:
@@ -338,6 +378,7 @@ func _on_world_time_advanced(total_seconds: float) -> void:
 	if aircraft_airborne and flight_delta > 0.0:
 		_advance_aircraft(flight_delta)
 	_enemy_attack(total_seconds)
+	_advance_damage_control(delta)
 	state_changed.emit()
 
 func _advance_enemy(delta: float) -> void:

@@ -83,6 +83,16 @@ func _run() -> void:
 	details.get_node("RadarActions/Fire").emit_signal("pressed")
 	await process_frame
 	_check(mission.enemy_health == 50.0 and not radar.gun_ready and "装填" in details.get_node("GunStatus").text, "successful shot updates damage and reload display")
+	clock.advance(10.0)
+	_check(details.get_node("ShipControls/DamageControl").visible, "incoming damage exposes repair controls")
+	details.get_node("ShipControls/DamageControl/Repair").emit_signal("pressed")
+	_check(mission.repair_teams == 1 and details.get_node("ShipControls/DamageControl/Repair").disabled and "损管" in details.get_node("GunStatus").text, "repair button starts work and explains gun unavailability")
+	await process_frame
+	var repair_button: Button = details.get_node("ShipControls/DamageControl/Repair")
+	var scroll: ScrollContainer = terminal.get_node("Content/DetailsFrame/DetailsScroll")
+	_check(repair_button.get_global_rect().end.x <= scroll.get_global_rect().end.x - scroll.get_v_scroll_bar().size.x, "repair action remains inside visible terminal width")
+	clock.advance(30.0)
+	_check(mission.ship_health == 100.0 and not details.get_node("ShipControls/DamageControl").visible, "completed repair updates hull and hides unnecessary controls")
 	await process_frame
 	var details_bottom: float = terminal.get_node("Content/DetailsFrame").get_rect().end.y
 	var footer_top: float = terminal.get_node("Footer").get_rect().position.y
