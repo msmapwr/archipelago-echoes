@@ -78,32 +78,54 @@ func _button(path: String) -> Button:
 func _apply_theme() -> void:
 	var ui_theme := Theme.new()
 	var terminal_font := SystemFont.new()
-	terminal_font.font_names = PackedStringArray(["Cascadia Mono", "Consolas", "Microsoft YaHei"])
+	terminal_font.font_names = PackedStringArray(["Consolas", "Cascadia Mono", "Microsoft YaHei"])
 	ui_theme.default_font = terminal_font
 	ui_theme.default_font_size = 16
-	ui_theme.set_color("font_color", "Button", Color("b6d8b9"))
-	ui_theme.set_color("font_hover_color", "Button", Color("e2f6df"))
-	ui_theme.set_color("font_pressed_color", "Button", Color("08110e"))
-	ui_theme.set_color("font_disabled_color", "Button", Color("6d816d"))
-	ui_theme.set_font_size("font_size", "Button", 15)
-	ui_theme.set_stylebox("normal", "Button", _button_style(Color("14271d"), Color("426951")))
-	ui_theme.set_stylebox("hover", "Button", _button_style(Color("234433"), Color("8be6a3")))
-	ui_theme.set_stylebox("pressed", "Button", _button_style(Color("8be6a3"), Color("8be6a3")))
-	ui_theme.set_stylebox("disabled", "Button", _button_style(Color("152017"), Color("344638")))
-	var focus := _button_style(Color(0, 0, 0, 0), Color("e8af58"))
+	ui_theme.set_color("font_color", "Button", Color("#c3d9c3"))
+	ui_theme.set_color("font_hover_color", "Button", Color("#eff9e8"))
+	ui_theme.set_color("font_pressed_color", "Button", Color("#07140e"))
+	ui_theme.set_color("font_disabled_color", "Button", Color("#6f8474"))
+	ui_theme.set_font_size("font_size", "Button", 17)
+	ui_theme.set_stylebox("normal", "Button", _button_style(Color("#152720"), Color("#4a6e58")))
+	ui_theme.set_stylebox("hover", "Button", _button_style(Color("#28513a"), Color("#a5efb2")))
+	ui_theme.set_stylebox("pressed", "Button", _button_style(Color("#8be6a3"), Color("#8be6a3")))
+	ui_theme.set_stylebox("disabled", "Button", _button_style(Color("#142119"), Color("#354c3b")))
+	ui_theme.set_stylebox("scroll", "VScrollBar", _scroll_style(Color("#15231b")))
+	ui_theme.set_stylebox("grabber", "VScrollBar", _scroll_style(Color("#526d58")))
+	ui_theme.set_stylebox("grabber_highlight", "VScrollBar", _scroll_style(Color("#8ad59c")))
+	ui_theme.set_stylebox("grabber_pressed", "VScrollBar", _scroll_style(Color("#a5efb2")))
+	var focus := _button_style(Color.TRANSPARENT, Color("#edc37e"))
 	focus.draw_center = false
 	ui_theme.set_stylebox("focus", "Button", focus)
 	terminal.theme = ui_theme
+	for path in ["RadarActions/Fire", "FlightControls/FlightActions/Attack", "PhaseActions/Launch"]:
+		var action := _button(path)
+		action.add_theme_stylebox_override("normal", _button_style(Color("#382723"), Color("#a66b57")))
+		action.add_theme_stylebox_override("hover", _button_style(Color("#694036"), Color("#edb081")))
+		action.add_theme_color_override("font_color", Color("#f2d0ac"))
+	for path in ["PhaseActions/Prepare", "PhaseActions/Return", "PhaseActions/Settle"]:
+		var action := _button(path)
+		action.add_theme_stylebox_override("normal", _button_style(Color("#3b3423"), Color("#9b8658")))
+		action.add_theme_color_override("font_color", Color("#e5d6ac"))
+	var details_scroll: ScrollContainer = terminal.get_node("Content/DetailsFrame/DetailsScroll")
+	details_scroll.get_v_scroll_bar().custom_minimum_size.x = 7.0
+
+func _scroll_style(fill: Color) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = fill
+	style.set_corner_radius_all(2)
+	return style
 
 func _button_style(background: Color, border: Color) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
 	style.bg_color = background
 	style.border_color = border
 	style.set_border_width_all(1)
+	style.set_corner_radius_all(2)
 	style.content_margin_left = 8.0
 	style.content_margin_right = 8.0
-	style.content_margin_top = 4.0
-	style.content_margin_bottom = 4.0
+	style.content_margin_top = 5.0
+	style.content_margin_bottom = 5.0
 	return style
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -179,11 +201,11 @@ func _refresh_ui() -> void:
 		"campaign_failed": "SIGNAL LOST / 战役失败",
 	}
 	mode_status.text = mode_labels.get(mode, mode)
-	mission_status.text = "任务 / 确认 A1，指挥官安全返回"
+	mission_status.text = "任务 01  /  确认 A1 · 指挥官安全返航"
 	if mode == "settlement":
-		mission_status.text = "任务完成 / 情报确认，指挥官安全回收"
+		mission_status.text = "任务完成  /  情报确认 · 指挥官安全回收"
 	elif mode == "campaign_failed":
-		mission_status.text = "战役结束 / 指挥官失联"
+		mission_status.text = "战役结束  /  指挥官失联"
 	elif mode == "switching":
 		mission_status.text = "指挥权移交 / 剩余 %.1f 秒" % MissionController.switch_seconds_remaining
 	_refresh_contact()
@@ -228,13 +250,13 @@ func _refresh_contact() -> void:
 	else:
 		var seen := floori(MissionController.last_contact_seconds)
 		if GameManager.mode == "cockpit" or GameManager.mode == "returning":
-			contact_details.text = "方位 %03d° · 距离 %.1f km · %s" % [roundi(MissionController.last_contact_bearing_degrees), MissionController.last_contact_range_km, "已确认" if GameManager.target_identified else "待确认"]
+			contact_details.text = "方位 %03d°   距离 %.1f km   /   %s" % [roundi(MissionController.last_contact_bearing_degrees), MissionController.last_contact_range_km, "已确认" if GameManager.target_identified else "待确认"]
 		else:
-			contact_details.text = "方位 %03d°   距离 %.1f km   观测 T+%02d:%02d   %s" % [roundi(MissionController.last_contact_bearing_degrees), MissionController.last_contact_range_km, floori(float(seen) / 60.0), seen % 60, "稳定" if MissionController.contact_visible else "中断"]
+			contact_details.text = "方位 %03d°   距离 %.1f km\n观测 T+%02d:%02d   /   %s" % [roundi(MissionController.last_contact_bearing_degrees), MissionController.last_contact_range_km, floori(float(seen) / 60.0), seen % 60, "稳定" if MissionController.contact_visible else "中断"]
 	selection_details.text = "雷达静默 · 开机后可复测接触" if not MissionController.radar_emitting else ("已选择 A1 · 可下达识别或开火命令" if selected_contact_id == MissionController.CONTACT_ID else "未选择接触 · 点击雷达回波")
 
 func _refresh_ship() -> void:
-	ship_details.text = "位置 E %05.1f / S %05.1f km   航向 %03d°\n航速 %.0f / %.0f kn   舰体 %.0f%%   弹药 %d" % [WorldState.ship_position_km.x, WorldState.ship_position_km.y, roundi(WorldState.ship_heading_degrees), WorldState.ship_speed_knots, WorldState.ship_max_speed_knots, MissionController.ship_health, MissionController.ship_ammo]
+	ship_details.text = "航向 %03d°   航速 %.0f / %.0f kn   舰体 %.0f%%\n位置 E %05.1f / S %05.1f km   弹药 %d" % [roundi(WorldState.ship_heading_degrees), WorldState.ship_speed_knots, WorldState.ship_max_speed_knots, MissionController.ship_health, WorldState.ship_position_km.x, WorldState.ship_position_km.y, MissionController.ship_ammo]
 	radar.set_ship_heading(WorldState.ship_heading_degrees)
 
 func _refresh_flight() -> void:
@@ -255,6 +277,7 @@ func _refresh_radar() -> void:
 		return
 	radar.set_land_areas(WorldState.map.islands, WorldState.ship_position_km)
 	radar.set_sweep_enabled(MissionController.radar_emitting)
+	radar.set_integrity(MissionController.ship_health)
 	radar.set_aircraft(MissionController.aircraft_position_km, MissionController.aircraft_airborne)
 	var relative := MissionController.last_contact_position_km - WorldState.ship_position_km
 	var bearing := fposmod(rad_to_deg(atan2(relative.x, -relative.y)), 360.0)

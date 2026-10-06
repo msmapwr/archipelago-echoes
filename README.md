@@ -1,6 +1,6 @@
 # 群岛回波 / Echoes of the Archipelago
 
-使用 Godot 4.7.2 开发的海空战术游戏原型。主场景是根据 [UI SVG 草图](docs/reference/ui_wireframe_redraw.svg) 布置的 16:9 舰桥控制台。启动时只有“开始游戏”按钮；点击后，之前的可交互 CRT 战术终端进入中央显示区，继续首关任务：搜索接触、识别或交火、驾驶侦察机、返航并结算。设计方向见 [游戏美学计划](docs/archipelago_echoes_aesthetic_plan.md)，阶段与后续工作见 [详细开发计划](docs/development-plan.md)。
+使用 Godot 4.7.2 开发的海空战术游戏原型。主场景是 16:9 的舰桥作战情报中心：中央是单色雷达与字符 CRT，旁边有机械仪表、彩色档案监视器和纸质航海图。菜单经过短暂的设备自检后，仅提供“开始游戏”按钮；点击后，首关战术终端接管中央 CRT，可搜索接触、识别或交火、驾驶侦察机、返航并结算。布局参考 [UI SVG 草图](docs/reference/ui_wireframe_redraw.svg)，视觉规则见 [游戏美学计划](docs/archipelago_echoes_aesthetic_plan.md)，阶段与后续工作见 [详细开发计划](docs/development-plan.md)。
 
 ## 运行与首关操作
 

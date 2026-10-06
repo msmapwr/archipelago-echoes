@@ -8,6 +8,8 @@ func _capture() -> void:
 	root.add_child(shell)
 	if OS.get_environment("CONSOLE_CAPTURE_MODE") == "game":
 		shell.get_node("StartButton").emit_signal("pressed")
+	else:
+		await create_timer(2.3, true).timeout
 	await process_frame
 	await process_frame
 	await RenderingServer.frame_post_draw
