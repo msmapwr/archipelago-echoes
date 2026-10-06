@@ -18,7 +18,11 @@
 
 ## 游戏流程
 
-点击“开始游戏”后依次进入开场、设置、背景、新手教程、指令部命令、生成和港口出航准备；动画与设置等内容仍预留，准备时世界暂停。进入港口后点击“解缆”，以航向按钮和加减速按钮驾驶舰船；港内限速 10 kn，沿中央航道向北驶过 320 m 外的离港线，才自动启动首关。码头、防波堤和港区边界会阻挡航行并停车，可调整航向后重试。港内支持暂停、×1／×10 时间与返回菜单，海上敌人和任务时钟保持冻结；离港后位置、航向和速度继续沿用。成功结算或失败后可返回主菜单，也可直接重试首关。设置保存与随机生成尚未实现，见 [完整游戏流程](docs/game-session-flow.md)。
+出航设置页可调整主音量、1280×720／1600×900／1920×1080 窗口、全屏和弱化 CRT；点击“应用并保存”生效，下次启动自动恢复。恢复默认只填入草稿，未应用的修改不会保存。配置位于 Godot 用户目录 `user://preferences.cfg`，保存失败保留旧设置。
+
+生成页可输入 0–2147483647 的种子或使用随机种子，生成五岛的位置偏移和半径；同一种子复现同一布局。修改种子后必须重新生成，通过出生点与离港航道校验才能继续；失败可重新生成或返回菜单。离港和首关重试沿用该种子。港口布局、岛屿锚点和任务配置仍为固定原型。
+
+点击“开始游戏”后依次进入开场、设置、背景、新手教程、指令部命令、海域生成和港口准备；完整动画与交互教程仍预留，准备时世界暂停。进入港口后点击“解缆”，以航向按钮和加减速按钮驾驶舰船；港内限速 10 kn，沿中央航道向北驶过 320 m 外的离港线，才自动启动首关。码头、防波堤和港区边界会阻挡航行并停车，可调整航向后重试。港内支持暂停、×1／×10 时间和返回菜单；离港后位置、航向和速度继续沿用。成功结算或失败后可返回主菜单，也可直接重试相同种子的首关。见 [完整游戏流程](docs/game-session-flow.md)。
 
 ## 验证
 
@@ -36,6 +40,7 @@ godot --headless --path . --script res://tests/m1_mission_smoke.gd
 godot --headless --path . --script res://tests/damage_control_smoke.gd
 godot --headless --path . --script res://tests/harbor_navigation_smoke.gd
 godot --headless --path . --script res://tests/radar_visual_smoke.gd
+godot --headless --path . --script res://tests/settings_generation_smoke.gd
 godot --headless --path . --script res://tests/menu_ui_smoke.gd
 godot --path . --script res://tests/m1_ui_smoke.gd
 ```

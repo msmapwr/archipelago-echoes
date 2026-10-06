@@ -167,6 +167,7 @@ func _enter_mission() -> void:
 	WorldState.set_ship_command(departure_heading, departure_speed)
 	WorldState.ship_position_changed.emit(departure_position)
 	EventBus.record("command_accepted", {"task_id": GameManager.current_task_id})
+	EventBus.record("scenario_generated", {"seed": WorldState.scenario_seed})
 	EventBus.record("harbor_departure", {"position_km": departure_position, "harbor_seconds": harbor_seconds})
 	var mission_screen := CRT_SCENE.instantiate()
 	mission_screen.menu_requested.connect(_return_to_menu)

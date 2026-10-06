@@ -7,9 +7,10 @@ func _capture() -> void:
 	var shell: Control = load("res://scenes/main/console_shell.tscn").instantiate()
 	root.add_child(shell)
 	var capture_mode := OS.get_environment("CONSOLE_CAPTURE_MODE")
-	if capture_mode == "preparation":
+	if capture_mode in ["preparation", "settings", "generation"]:
 		shell.get_node("StartButton").emit_signal("pressed")
-		for step in range(4):
+		var count := 1 if capture_mode == "settings" else 5 if capture_mode == "generation" else 4
+		for step in range(count):
 			shell.get_node("GameCRTSlot/Preparation").advance()
 		await create_timer(0.7, true).timeout
 	elif capture_mode == "harbor" or capture_mode == "game" or capture_mode == "damage":

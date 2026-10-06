@@ -15,18 +15,30 @@ var ship_heading_degrees: float = 0.0
 var ship_speed_knots: float = 0.0
 var ship_max_speed_knots: float = 0.0
 var _last_clock_seconds: float = 0.0
+var scenario_seed: int = FIRST_SCENARIO_SEED
+var generation_error: String = ""
 
 func _ready() -> void:
 	WorldClock.time_advanced.connect(_on_world_time_advanced)
 	load_first_scenario()
 
 func load_first_scenario(map_seed: int = FIRST_SCENARIO_SEED) -> bool:
+	generation_error = ""
+	if map_seed < 0 or map_seed > 2147483647:
+		generation_error = "海域种子必须在 0–2147483647 之间。"
+		return false
 	var contact: ContactDefinition = DataManager.get_definition("contact.alpha") as ContactDefinition
 	var ship: ShipDefinition = DataManager.get_definition("ship.haven") as ShipDefinition
 	if contact == null or ship == null:
+		generation_error = "首关舰艇或接触数据缺失。"
 		push_error("[WorldState] first scenario ship or contact is missing")
 		return false
-	map = ArchipelagoMap.new(map_seed, contact.bearing_degrees, contact.range_km)
+	var candidate = ArchipelagoMap.new(map_seed, contact.bearing_degrees, contact.range_km)
+	if not candidate.is_water(candidate.ship_start_km) or not candidate.is_water(candidate.contact_position_km) or not candidate.can_navigate_segment(candidate.ship_start_km, candidate.ship_start_km + Vector2(0, -0.32)):
+		generation_error = "海域未通过出生点与离港航道校验，请更换种子重试。"
+		return false
+	map = candidate
+	scenario_seed = map_seed
 	ship_position_km = map.ship_start_km
 	contact_position_km = map.contact_position_km
 	ship_heading_degrees = 0.0

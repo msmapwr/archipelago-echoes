@@ -16,6 +16,7 @@ config/features=PackedStringArray("4.7")
 
 [autoload]
 
+UserSettings="*res://scripts/core/user_settings.gd"
 EventBus="*res://scripts/core/event_bus.gd"
 DataManager="*res://scripts/core/data_manager.gd"
 GameManager="*res://scripts/core/game_manager.gd"
@@ -48,3 +49,10 @@ pause_simulation={
 
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
+
+[shader_globals]
+
+crt_effect_strength={
+"type": "float",
+"value": 1.0
+}

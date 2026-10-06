@@ -62,7 +62,7 @@ func restart_scenario() -> void:
 	GameManager.reset_for_new_scenario()
 	WorldClock.reset()
 	WorldClock.set_time_scale(1.0)
-	WorldState.load_first_scenario()
+	WorldState.load_first_scenario(WorldState.scenario_seed)
 	_initialize_scenario()
 	scan()
 
