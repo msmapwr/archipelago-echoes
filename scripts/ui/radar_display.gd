@@ -37,9 +37,9 @@ func set_display_range(value: float) -> void:
 	display_range_km = value
 	queue_redraw()
 
-func set_gun_solution(show_arc: bool, ready: bool, weapon_range_km: float) -> void:
+func set_gun_solution(show_arc: bool, solution_ready: bool, weapon_range_km: float) -> void:
 	gun_arc_visible = show_arc
-	gun_ready = ready
+	gun_ready = solution_ready
 	gun_range_km = weapon_range_km
 	queue_redraw()
 
