@@ -1,4 +1,4 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=10 format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/console_shell.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/ui/crt_bezel.gd" id="2"]
@@ -10,6 +10,13 @@
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_menu_glass"]
 shader = ExtResource("4")
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_video_glass"]
+shader = ExtResource("4")
+shader_parameter/line_strength = 0.0
+shader_parameter/edge_strength = 0.05
+shader_parameter/screen_size = Vector2(188, 154)
+shader_parameter/corner_radius = 14.0
 
 [node name="ConsoleShell" type="Control"]
 process_mode = 3
@@ -152,6 +159,17 @@ offset_right = 1839.0
 offset_bottom = 394.0
 mouse_filter = 2
 script = ExtResource("6")
+
+[node name="Glass" type="ColorRect" parent="VideoMonitor"]
+material = SubResource("ShaderMaterial_video_glass")
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(1, 1, 1, 1)
 
 [node name="PaperChart" type="Control" parent="."]
 layout_mode = 1

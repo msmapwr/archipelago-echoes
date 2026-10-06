@@ -181,6 +181,13 @@ text = "未选择接触 · 点击雷达回波"
 theme_override_font_sizes/font_size = 15
 theme_override_colors/font_color = Color(0.65, 0.77, 0.68, 1)
 
+[node name="GunStatus" type="Label" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0.91, 0.73, 0.45, 1)
+text = "火控 / 等待选择"
+autowrap_mode = 3
+
 [node name="RadarActions" type="HBoxContainer" parent="ScreenContainer/ScreenViewport/Terminal/Content/DetailsFrame/DetailsScroll/Details"]
 layout_mode = 2
 theme_override_constants/separation = 6
@@ -438,6 +445,11 @@ text = "运行中 · 空格暂停"
 [node name="TimeScale" type="Button" parent="ScreenContainer/ScreenViewport/Terminal/Footer"]
 layout_mode = 2
 text = "时间 ×1"
+
+[node name="RadarRange" type="Button" parent="ScreenContainer/ScreenViewport/Terminal/Footer"]
+layout_mode = 2
+text = "量程 25 km"
+tooltip_text = "切换 12.5 / 25 km 显示量程；探测能力仍为 25 km"
 
 [node name="TimeStatus" type="Label" parent="ScreenContainer/ScreenViewport/Terminal/Footer"]
 layout_mode = 2

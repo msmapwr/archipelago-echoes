@@ -66,6 +66,23 @@ func _run() -> void:
 	_check(game.mode == "settlement" and details.get_node("PhaseActions/Restart").visible, "successful mission offers restart")
 	details.get_node("PhaseActions/Restart").emit_signal("pressed")
 	_check(game.mode == "bridge" and not game.target_identified, "restart begins a fresh mission")
+	terminal.get_node("Footer/RadarRange").emit_signal("pressed")
+	_check(radar.display_range_km == 12.5 and not radar.contact_visible and mission.contact_visible, "near display clips distant echo without losing sensor report")
+	terminal.get_node("Footer/RadarRange").emit_signal("pressed")
+	_check(radar.display_range_km == 25.0 and radar.contact_visible, "search display restores distant contact")
+	_check("没有可射击" in details.get_node("GunStatus").text and radar.gun_arc_visible, "fire control states missing selection and displays gun arc")
+	var world: Node = root.get_node("WorldState")
+	world.set_ship_command(42.0, 22.0)
+	clock.advance(1000.0)
+	world.set_ship_command(world.ship_heading_degrees, 0.0)
+	mission.scan()
+	details.get_node("RadarActions/Identify").emit_signal("pressed")
+	click.position = radar._contact_position()
+	radar._gui_input(click)
+	_check(radar.gun_ready and "可开火" in details.get_node("GunStatus").text, "in-range forward contact produces a ready firing solution")
+	details.get_node("RadarActions/Fire").emit_signal("pressed")
+	await process_frame
+	_check(mission.enemy_health == 50.0 and not radar.gun_ready and "装填" in details.get_node("GunStatus").text, "successful shot updates damage and reload display")
 	await process_frame
 	var details_bottom: float = terminal.get_node("Content/DetailsFrame").get_rect().end.y
 	var footer_top: float = terminal.get_node("Footer").get_rect().position.y

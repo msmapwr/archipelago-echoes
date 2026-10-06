@@ -28,6 +28,20 @@ var sweep_angle_degrees: float = 0.0
 var sweep_enabled: bool = true
 var hull_integrity: float = 100.0
 var _echoes: Array[Dictionary] = []
+var display_range_km: float = MAX_RANGE_KM
+var gun_arc_visible: bool = false
+var gun_ready: bool = false
+var gun_range_km: float = 10.0
+
+func set_display_range(value: float) -> void:
+	display_range_km = value
+	queue_redraw()
+
+func set_gun_solution(show_arc: bool, ready: bool, weapon_range_km: float) -> void:
+	gun_arc_visible = show_arc
+	gun_ready = ready
+	gun_range_km = weapon_range_km
+	queue_redraw()
 
 func _ready() -> void:
 	WorldClock.time_advanced.connect(_on_world_time_advanced)
@@ -88,7 +102,7 @@ func set_contact(id: String, bearing: float, distance: float, display_visible: b
 	bearing_degrees = bearing
 	range_km = distance
 	contact_confirmed = confirmed
-	contact_visible = display_visible and distance <= MAX_RANGE_KM
+	contact_visible = display_visible and distance <= display_range_km
 	mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND if contact_visible else Control.CURSOR_ARROW
 	if not contact_visible and contact_selected_state:
 		clear_selection()
@@ -120,6 +134,8 @@ func _draw() -> void:
 	draw_arc(center, radius + 7.0, 0.0, TAU, 160, Color("#40674b"), 2.0, true)
 	draw_circle(center, radius, DARK)
 	_draw_grid(center, radius)
+	if gun_arc_visible:
+		_draw_gun_arc(center, radius)
 	_draw_land(center, radius)
 	_draw_echoes(center, radius)
 	if sweep_enabled:
@@ -146,10 +162,10 @@ func _draw_land(center: Vector2, radius: float) -> void:
 	for island in land_areas:
 		var offset_km: Vector2 = island["center"] - own_position_km
 		var island_radius_km: float = island["radius_km"]
-		if offset_km.length() + island_radius_km > MAX_RANGE_KM:
+		if offset_km.length() + island_radius_km > display_range_km:
 			continue
-		var point := center + offset_km * radius / MAX_RANGE_KM
-		var island_radius := island_radius_km * radius / MAX_RANGE_KM
+		var point := center + offset_km * radius / display_range_km
+		var island_radius := island_radius_km * radius / display_range_km
 		for contour in range(3):
 			var points := PackedVector2Array()
 			var contour_scale := 1.0 - float(contour) * 0.24
@@ -164,13 +180,13 @@ func _draw_land(center: Vector2, radius: float) -> void:
 func _draw_echoes(center: Vector2, radius: float) -> void:
 	for echo in _echoes:
 		var offset: Vector2 = echo["position_km"] - own_position_km
-		if offset.length() > MAX_RANGE_KM:
+		if offset.length() > display_range_km:
 			continue
 		var age: float = maxf(0.0, WorldClock.elapsed_seconds - float(echo["time"]))
 		var energy: float = pow(1.0 - age / ECHO_LIFETIME_SECONDS, 1.7) * float(echo["strength"])
 		if energy <= 0.0:
 			continue
-		var point := center + offset * radius / MAX_RANGE_KM
+		var point := center + offset * radius / display_range_km
 		draw_circle(point, 15.0, Color(0.49, 1.0, 0.61, energy * 0.045))
 		draw_circle(point, 8.0, Color(0.49, 1.0, 0.61, energy * 0.09))
 		draw_circle(point, 3.0, Color(0.71, 1.0, 0.76, energy * 0.48))
@@ -194,8 +210,8 @@ func _draw_ownship(center: Vector2, radius: float) -> void:
 	draw_arc(center, 12.0, 0.0, TAU, 32, Color("#3c7977"), 1.0)
 	if aircraft_visible:
 		var offset := aircraft_position_km - own_position_km
-		if offset.length() <= MAX_RANGE_KM:
-			var point := center + offset * radius / MAX_RANGE_KM
+		if offset.length() <= display_range_km:
+			var point := center + offset * radius / display_range_km
 			draw_colored_polygon(PackedVector2Array([point + Vector2(0, -8), point + Vector2(-6, 6), point + Vector2(6, 6)]), OWN_SHIP)
 
 func _draw_contact(_center: Vector2, _radius: float) -> void:
@@ -220,11 +236,20 @@ func _draw_readout(center: Vector2, radius: float) -> void:
 	draw_string(font, center + Vector2(-7, radius + 18), "S", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, GRID)
 	draw_string(font, center + Vector2(-radius - 16, 5), "W", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, GRID)
 	draw_string(font, center + Vector2(-radius + 2, radius + 28), "PPI / SEARCH", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#73a984"))
-	draw_string(font, center + Vector2(radius - 57, radius + 28), "25 KM", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#73a984"))
+	draw_string(font, center + Vector2(radius - 80, radius + 28), "%.1f KM" % display_range_km, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#73a984"))
+
+func _draw_gun_arc(center: Vector2, radius: float) -> void:
+	var reach := radius * minf(gun_range_km / display_range_km, 1.0)
+	var start := deg_to_rad(own_heading_degrees - MissionController.GUN_HALF_ARC_DEGREES - 90.0)
+	var end := deg_to_rad(own_heading_degrees + MissionController.GUN_HALF_ARC_DEGREES - 90.0)
+	var tint := PHOSPHOR if gun_ready else AMBER
+	draw_arc(center, reach, start, end, 64, Color(tint, 0.45), 1.2, true)
+	for angle in [start, end]:
+		draw_line(center, center + Vector2(cos(angle), sin(angle)) * reach, Color(tint, 0.24), 1.0, true)
 
 func _contact_position() -> Vector2:
 	var center := size * 0.5
 	var radius := minf(size.x, size.y) * 0.435
-	var distance := clampf(range_km / MAX_RANGE_KM, 0.0, 1.0) * radius
+	var distance := clampf(range_km / display_range_km, 0.0, 1.0) * radius
 	var radians := deg_to_rad(bearing_degrees)
 	return center + Vector2(sin(radians), -cos(radians)) * distance

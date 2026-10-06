@@ -22,7 +22,12 @@ func _draw() -> void:
 	draw_polyline(PackedVector2Array([Vector2(4, 82), Vector2(23, 68), Vector2(48, 60), Vector2(73, 64), Vector2(89, 77)]), Color("#9caaa0"), 1.0)
 	for x in range(5, roundi(width) - 4, 3):
 		draw_line(Vector2(x, 5), Vector2(x, height - 4), Color(0.03, 0.08, 0.08, 0.028), 1.0)
-	draw_rect(Rect2(3, 3, width - 6, height - 6), Color("#6d8580"), false, 1.0)
+	var glass_border := StyleBoxFlat.new()
+	glass_border.draw_center = false
+	glass_border.border_color = Color("#6d8580")
+	glass_border.set_border_width_all(1)
+	glass_border.set_corner_radius_all(12)
+	draw_style_box(glass_border, Rect2(3, 3, width - 6, height - 6))
 	draw_rect(Rect2(9, 111, 116, 29), Color(0.03, 0.09, 0.1, 0.81))
 	draw_string(ThemeDB.fallback_font, Vector2(15, 128), "ARCHIVE  /  01", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#e8e7d1"))
 	draw_circle(Vector2(width - 18, 17), 4.0, Color("#7de7ab") if active else Color("#e4ab65"))

@@ -8,6 +8,7 @@ const SHIP_ID := "ship.haven"
 const SCAN_RANGE_KM := 25.0
 const RECON_RANGE_KM := 3.0
 const GUN_DAMAGE := 50.0
+const GUN_HALF_ARC_DEGREES := 70.0
 const ENEMY_DAMAGE := 20.0
 const RADAR_INTERCEPT_RANGE_KM := 14.0
 const ENEMY_GUN_RANGE_KM := 10.0
@@ -161,25 +162,9 @@ func identify_contact() -> bool:
 	return _accept("A1 已确认，首关目标情报完成")
 
 func fire_ship_gun(contact_id: String) -> bool:
-	if GameManager.mode != "bridge" or not GameManager.ship_afloat:
-		return _reject("甲板炮仅可在舰桥指挥")
-	if not radar_emitting:
-		return _reject("雷达静默中，火控无法跟踪接触")
-	if contact_id != CONTACT_ID or not contact_visible or not enemy_alive:
-		return _reject("没有可射击的已选接触")
-	if not GameManager.target_identified:
-		return _reject("目标尚未确认，禁止开火")
-	if ship_ammo <= 0:
-		return _reject("甲板炮弹药耗尽")
-	if WorldClock.elapsed_seconds < next_ship_fire_seconds:
-		return _reject("甲板炮装填中：还需 %.0f 秒" % (next_ship_fire_seconds - WorldClock.elapsed_seconds))
-	var weapon: WeaponDefinition = DataManager.get_definition("weapon.deck_gun") as WeaponDefinition
-	if weapon == null or WorldState.contact_range_km() > weapon.range_km:
-		return _reject("目标超出甲板炮射程")
-	if WorldClock.elapsed_seconds - last_contact_seconds > 45.0:
-		return _reject("接触情报已过期，请重新扫描")
-	if not WorldState.map.can_navigate_segment(WorldState.ship_position_km, WorldState.contact_position_km):
-		return _reject("岛屿遮挡射线")
+	var reason := ship_gun_block_reason(contact_id)
+	if not reason.is_empty():
+		return _reject(reason)
 	ship_ammo -= 1
 	next_ship_fire_seconds = WorldClock.elapsed_seconds + 30.0
 	enemy_alert_until_seconds = maxf(enemy_alert_until_seconds, WorldClock.elapsed_seconds + TRACK_MEMORY_SECONDS)
@@ -188,6 +173,35 @@ func fire_ship_gun(contact_id: String) -> bool:
 	_damage_enemy(GUN_DAMAGE, "deck_gun")
 	state_changed.emit()
 	return _accept("甲板炮命中 A1，目标损伤 %.0f%%" % (100.0 - enemy_health))
+
+func ship_gun_block_reason(contact_id: String) -> String:
+	if GameManager.mode != "bridge" or not GameManager.ship_afloat:
+		return "甲板炮仅可在舰桥指挥"
+	if get_tree().paused:
+		return "模拟暂停，无法开火"
+	if not radar_emitting:
+		return "雷达静默中，火控无法跟踪接触"
+	if contact_id != CONTACT_ID or not contact_visible or not enemy_alive:
+		return "没有可射击的已选接触"
+	if not GameManager.target_identified:
+		return "目标尚未确认，禁止开火"
+	if ship_ammo <= 0:
+		return "甲板炮弹药耗尽"
+	if WorldClock.elapsed_seconds < next_ship_fire_seconds:
+		return "甲板炮装填中：还需 %.0f 秒" % ceilf(next_ship_fire_seconds - WorldClock.elapsed_seconds)
+	var weapon: WeaponDefinition = DataManager.get_definition("weapon.deck_gun") as WeaponDefinition
+	if weapon == null or WorldState.contact_range_km() > weapon.range_km:
+		return "目标超出甲板炮射程"
+	if WorldClock.elapsed_seconds - last_contact_seconds > 45.0:
+		return "接触情报已过期，请重新扫描"
+	var relative := last_contact_position_km - WorldState.ship_position_km
+	var bearing := rad_to_deg(atan2(relative.x, -relative.y))
+	var bearing_error := absf(wrapf(bearing - WorldState.ship_heading_degrees, -180.0, 180.0))
+	if bearing_error > GUN_HALF_ARC_DEGREES:
+		return "目标在甲板炮射界外：调整舰艏朝向 A1"
+	if not WorldState.map.can_navigate_segment(WorldState.ship_position_km, WorldState.contact_position_km):
+		return "岛屿遮挡射线"
+	return ""
 
 func prepare_sortie() -> bool:
 	if GameManager.mode != "bridge" or not GameManager.ship_afloat:

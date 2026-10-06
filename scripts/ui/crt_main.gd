@@ -8,6 +8,7 @@ extends Control
 @onready var contact_status: Label = details.get_node("ContactStatus")
 @onready var contact_details: Label = details.get_node("ContactDetails")
 @onready var selection_details: Label = details.get_node("SelectionDetails")
+@onready var gun_status: Label = details.get_node("GunStatus")
 @onready var ship_controls: VBoxContainer = details.get_node("ShipControls")
 @onready var ship_details: Label = ship_controls.get_node("ShipDetails")
 @onready var navigation_status: Label = ship_controls.get_node("NavigationStatus")
@@ -20,6 +21,7 @@ extends Control
 @onready var pause_status: Button = terminal.get_node("Footer/PauseStatus")
 @onready var time_scale_button: Button = terminal.get_node("Footer/TimeScale")
 @onready var time_status: Label = terminal.get_node("Footer/TimeStatus")
+@onready var radar_range_button: Button = terminal.get_node("Footer/RadarRange")
 
 var selected_contact_id: String = ""
 var _next_auto_scan_seconds: float = 30.0
@@ -71,6 +73,11 @@ func _connect_buttons() -> void:
 	_button("PhaseActions/Restart").pressed.connect(_on_restart_pressed)
 	pause_status.pressed.connect(_toggle_pause)
 	time_scale_button.pressed.connect(_toggle_time_scale)
+	radar_range_button.pressed.connect(_toggle_radar_range)
+
+func _toggle_radar_range() -> void:
+	radar.set_display_range(12.5 if radar.display_range_km == 25.0 else 25.0)
+	_refresh_ui()
 
 func _button(path: String) -> Button:
 	return details.get_node(path) as Button
@@ -213,11 +220,13 @@ func _refresh_ui() -> void:
 	_refresh_flight()
 	_refresh_debrief()
 	_refresh_radar()
+	_refresh_gun_status()
 	ship_controls.visible = mode == "bridge" or mode == "configuration" or mode == "switching"
 	flight_controls.visible = mode == "cockpit" or mode == "returning"
 	debrief.visible = mode == "settlement" or mode == "campaign_failed"
 	details.get_node("RadarActions").visible = mode == "bridge"
 	selection_details.visible = mode == "bridge"
+	gun_status.visible = mode == "bridge"
 	_button("PhaseActions/Prepare").visible = mode == "bridge" and not GameManager.player_recovered
 	_button("PhaseActions/Launch").visible = mode == "configuration"
 	_button("PhaseActions/Cancel").visible = mode == "configuration" or mode == "switching"
@@ -232,7 +241,17 @@ func _refresh_ui() -> void:
 	_button("RadarActions/Fire").disabled = get_tree().paused
 	pause_status.text = "已暂停 · 点击继续" if get_tree().paused else "运行中 · 空格暂停"
 	time_scale_button.text = "时间 ×%.0f" % WorldClock.time_scale
+	radar_range_button.text = "量程 %.1f km" % radar.display_range_km
 	action_status.text = MissionController.last_message
+
+func _refresh_gun_status() -> void:
+	var reason := MissionController.ship_gun_block_reason(selected_contact_id)
+	var weapon: WeaponDefinition = DataManager.get_definition("weapon.deck_gun") as WeaponDefinition
+	var weapon_range := weapon.range_km if weapon != null else 0.0
+	gun_status.text = "火控 / %s" % ("可开火 · %.0f km / 前向 ±%.0f°" % [weapon_range, MissionController.GUN_HALF_ARC_DEGREES] if reason.is_empty() else reason)
+	gun_status.add_theme_color_override("font_color", Color("#83e8aa") if reason.is_empty() else Color("#e8b968"))
+	_button("RadarActions/Fire").tooltip_text = "甲板炮 %.0f km / 舰艏两侧各 %.0f°\n%s" % [weapon_range, MissionController.GUN_HALF_ARC_DEGREES, "可开火" if reason.is_empty() else reason]
+	radar.set_gun_solution(GameManager.mode == "bridge", reason.is_empty(), weapon_range)
 
 func _refresh_contact() -> void:
 	if not MissionController.enemy_alive:

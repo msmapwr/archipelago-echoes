@@ -23,6 +23,11 @@ func _run() -> void:
 	_check(not mission.fire_ship_gun("contact.alpha") and "过期" in mission.last_message, "stale contact cannot guide fire")
 	world.set_ship_command(world.ship_heading_degrees, 0.0)
 	mission.scan()
+	var firing_heading: float = world.ship_heading_degrees
+	world.set_ship_command(firing_heading + 180.0, 0.0)
+	_check(not mission.fire_ship_gun("contact.alpha") and "射界" in mission.last_message and mission.ship_ammo == 6, "target behind bow cannot be fired on or consume ammunition")
+	world.set_ship_command(firing_heading, 0.0)
+	_check(mission.ship_gun_block_reason("contact.alpha").is_empty(), "gun readiness matches firing validation")
 	_check(mission.fire_ship_gun("contact.alpha") and mission.enemy_health == 50.0, "confirmed in-range shot damages target")
 	_check(not mission.fire_ship_gun("contact.alpha") and "装填" in mission.last_message, "reload interval prevents instant repeat")
 	clock.advance(30.0)
