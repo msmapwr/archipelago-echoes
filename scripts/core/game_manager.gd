@@ -52,7 +52,7 @@ func _transition(next_mode: String) -> bool:
 	if mode == "returning" and next_mode == "bridge" and (not player_recovered or recovery_site != "ship"):
 		push_warning("[GameManager] return to bridge requires ship recovery")
 		return false
-	if next_mode == "settlement" and (not target_identified or not player_recovered or task_settled):
+	if next_mode == "settlement" and (not target_identified or not player_recovered):
 		push_warning("[GameManager] settlement requires identified target and safe recovery")
 		return false
 	if next_mode == "campaign_failed" and player_alive:
@@ -81,6 +81,8 @@ func set_paused(paused: bool) -> void:
 	EventBus.record("simulation_pause_changed", {"paused": paused})
 
 func identify_target(contact_id: String) -> bool:
+	if not player_alive or mode in ["settlement", "campaign_failed"] or target_identified:
+		return false
 	var task: TaskDefinition = DataManager.get_definition(current_task_id) as TaskDefinition
 	if task == null or task.target_contact_id != contact_id:
 		return false
@@ -101,23 +103,26 @@ func recover_player(site: String) -> bool:
 			recovery_site = ""
 			return false
 	elif site == "friendly_airfield" or site == "rescue":
-		if not change_mode("recovered"):
-			return false
 		player_recovered = true
 		recovery_site = site
+		if not change_mode("recovered"):
+			player_recovered = false
+			recovery_site = ""
+			return false
 	else:
 		return false
 	EventBus.record("player_recovered", {"site": site})
 	return true
 
 func settle(result: String) -> bool:
-	if not player_alive or not target_identified or not player_recovered:
+	if not player_alive or not target_identified or not player_recovered or task_settled:
 		return false
 	if mode != "bridge" and mode != "recovered":
 		return false
-	if not _transition("settlement"):
-		return false
 	task_settled = true
+	if not _transition("settlement"):
+		task_settled = false
+		return false
 	EventBus.task_settled.emit(current_task_id, result)
 	EventBus.record("task_settled", {"task_id": current_task_id, "result": result})
 	return true

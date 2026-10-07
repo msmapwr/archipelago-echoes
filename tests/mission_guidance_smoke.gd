@@ -136,6 +136,10 @@ func _click_button(main: Control, button: Button) -> void:
 	if DisplayServer.get_name() == "headless":
 		button.emit_signal("pressed")
 		return
+	# Containers settle over deferred frames after dynamically built controls are hidden.
+	await process_frame
+	await process_frame
+	await RenderingServer.frame_post_draw
 	var click := InputEventMouseButton.new()
 	click.button_index = MOUSE_BUTTON_LEFT
 	click.pressed = true

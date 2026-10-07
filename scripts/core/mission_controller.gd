@@ -47,6 +47,7 @@ var aircraft_speed_knots: float = 135.0
 var aircraft_fuel_seconds: float = 0.0
 var aircraft_airborne: bool = false
 var sorties_launched: int = 0
+var sortie_ship_standby: bool = false
 var aircraft_bombs: int = 1
 var aircraft_destination: String = "manual"
 var airfield_position_km: Vector2 = Vector2.ZERO
@@ -96,6 +97,7 @@ func _initialize_scenario() -> void:
 		aircraft_fuel_seconds = aircraft.fuel_minutes * 60.0
 	aircraft_airborne = false
 	sorties_launched = 0
+	sortie_ship_standby = false
 	aircraft_bombs = 1
 	aircraft_destination = "manual"
 	if WorldState.map != null:
@@ -105,6 +107,8 @@ func _initialize_scenario() -> void:
 	state_changed.emit()
 
 func scan() -> bool:
+	if not _action_allowed():
+		return false
 	if GameManager.mode == "settlement" or GameManager.mode == "campaign_failed":
 		return _reject("任务已结束，无法扫描")
 	if not radar_emitting:
@@ -157,6 +161,8 @@ func set_radar_emitting(is_enabled: bool) -> bool:
 	return _accept("雷达静默；保留最后观测，敌方追踪不会立即消失" if enemy_tracking_ship else "雷达静默；保留最后观测")
 
 func identify_contact() -> bool:
+	if not _action_allowed():
+		return false
 	if GameManager.mode != "bridge":
 		return _reject("识别命令需在舰桥下达")
 	if not radar_emitting:
@@ -246,28 +252,70 @@ func _advance_damage_control(delta: float) -> void:
 		_feedback("损管完成：舰体 %.0f%%，甲板炮恢复可用" % ship_health)
 
 func prepare_sortie() -> bool:
+	if not _action_allowed():
+		return false
 	if GameManager.mode != "bridge" or not GameManager.ship_afloat:
 		return _reject("当前无法配置出击")
+	if GameManager.player_recovered:
+		return _reject("已安全回收，请完成目标并提交任务报告")
+	var readiness := _sortie_readiness_error()
+	if not readiness.is_empty():
+		return _reject(readiness)
 	if not GameManager.change_mode("configuration"):
 		return false
 	state_changed.emit()
 	return _accept("隼影侦察机已进入出击配置")
 
+func command_ship(heading_degrees: float, speed_knots: float) -> bool:
+	if GameManager.mode not in ["bridge", "configuration", "switching"] or not GameManager.ship_afloat or not GameManager.player_alive:
+		return _reject("当前没有舰桥航行控制权")
+	if not WorldState.set_ship_command(heading_degrees, speed_knots):
+		return _reject("航行命令无效，请检查航向和航速范围")
+	return _accept("航行命令已接收；暂停时将在继续后执行" if get_tree().paused else "舰桥航行命令已生效")
+
+func set_sortie_ship_standby(enabled: bool) -> bool:
+	if GameManager.mode != "configuration":
+		return _reject("母舰托管方式只能在出击配置中选择")
+	sortie_ship_standby = enabled
+	EventBus.record("sortie_configured", {"ship_standby": enabled})
+	state_changed.emit()
+	return _accept("离舰后母舰将停车待命" if enabled else "离舰后母舰将保持最后航行命令")
+
+func request_ship_standby() -> bool:
+	if GameManager.mode not in ["cockpit", "returning"] or not aircraft_airborne or not GameManager.ship_afloat:
+		return _reject("母舰待命请求需要飞机在空中且母舰仍在航")
+	if WorldState.ship_speed_knots == 0:
+		return _reject("母舰已经停车待命")
+	WorldState.set_ship_command(WorldState.ship_heading_degrees, 0.0)
+	EventBus.record("ship_standby_requested", {})
+	state_changed.emit()
+	return _accept("母舰收到待命请求，已停车；敌方行动仍会继续")
+
 func cancel_sortie() -> bool:
+	if not _action_allowed():
+		return false
 	if GameManager.mode != "configuration" and GameManager.mode != "switching":
 		return _reject("当前没有可取消的出击")
-	if not GameManager.change_mode("bridge" if GameManager.mode == "configuration" else "configuration"):
-		return false
+	var previous_wait := switch_seconds_remaining
 	switch_seconds_remaining = 0.0
+	if not GameManager.change_mode("bridge" if GameManager.mode == "configuration" else "configuration"):
+		switch_seconds_remaining = previous_wait
+		return false
 	state_changed.emit()
 	return _accept("出击流程已取消")
 
 func launch_sortie() -> bool:
+	if not _action_allowed():
+		return false
 	if GameManager.mode != "configuration" or not GameManager.aircraft_operational:
 		return _reject("飞机未就绪")
-	if not GameManager.change_mode("switching"):
-		return false
+	var readiness := _sortie_readiness_error()
+	if not readiness.is_empty():
+		return _reject(readiness)
 	switch_seconds_remaining = 5.0
+	if not GameManager.change_mode("switching"):
+		switch_seconds_remaining = 0.0
+		return false
 	state_changed.emit()
 	return _accept("指挥权移交中，母舰继续执行最后航行命令")
 
@@ -294,6 +342,8 @@ func set_aircraft_destination(destination: String) -> bool:
 	return _accept("飞机导航目标：%s" % target_names[destination])
 
 func perform_recon() -> bool:
+	if not _action_allowed():
+		return false
 	if not aircraft_airborne or GameManager.mode != "cockpit":
 		return _reject("侦察须在座舱执行")
 	if not enemy_alive:
@@ -308,6 +358,8 @@ func perform_recon() -> bool:
 	return _accept("空中侦察确认 A1，情报已回传")
 
 func aircraft_attack() -> bool:
+	if not _action_allowed():
+		return false
 	if not aircraft_airborne or GameManager.mode != "cockpit":
 		return _reject("当前无法对海攻击")
 	if not GameManager.target_identified or not enemy_alive:
@@ -324,15 +376,35 @@ func aircraft_attack() -> bool:
 	return _accept("对海攻击命中，A1 已失去战斗力")
 
 func begin_return() -> bool:
+	if not _action_allowed():
+		return false
 	if GameManager.mode != "cockpit" or not aircraft_airborne:
 		return _reject("当前无法进入返航流程")
-	if not GameManager.change_mode("returning"):
-		return false
+	var previous_destination := aircraft_destination
 	aircraft_destination = "ship" if GameManager.ship_afloat else "airfield"
+	if not GameManager.change_mode("returning"):
+		aircraft_destination = previous_destination
+		return false
 	state_changed.emit()
 	return _accept("返航中；到达回收点后执行降落")
 
+func cancel_return() -> bool:
+	if not _action_allowed():
+		return false
+	if GameManager.mode != "returning" or not aircraft_airborne:
+		return _reject("当前没有可取消的返航")
+	var previous_destination := aircraft_destination
+	aircraft_destination = "manual"
+	if not GameManager.change_mode("cockpit"):
+		aircraft_destination = previous_destination
+		return false
+	EventBus.record("return_cancelled", {})
+	state_changed.emit()
+	return _accept("返航已取消；保持当前航向，燃油不会恢复。可重新导航 A1 继续侦察")
+
 func land_aircraft() -> bool:
+	if not _action_allowed():
+		return false
 	if GameManager.mode != "returning" or not aircraft_airborne:
 		return _reject("飞机尚未进入返航状态")
 	var ship_distance := aircraft_position_km.distance_to(WorldState.ship_position_km)
@@ -346,15 +418,20 @@ func land_aircraft() -> bool:
 		site = "friendly_airfield"
 	else:
 		return _reject("尚未到达回收点：母舰 %.1f km / 机场 %.1f km" % [ship_distance, airfield_distance])
-	if not GameManager.recover_player(site):
-		return _reject("回收条件不满足")
+	var previous_destination := aircraft_destination
 	aircraft_airborne = false
 	aircraft_destination = "manual"
+	if not GameManager.recover_player(site):
+		aircraft_airborne = true
+		aircraft_destination = previous_destination
+		return _reject("回收条件不满足")
 	EventBus.record("aircraft_landed", {"site": site})
 	state_changed.emit()
 	return _accept("飞机已安全回收：%s" % ("母舰" if site == "ship" else "友方机场"))
 
 func complete_mission() -> bool:
+	if not _action_allowed():
+		return false
 	if not GameManager.target_identified:
 		return _reject("指定接触尚未确认")
 	if not GameManager.player_recovered:
@@ -430,14 +507,21 @@ func _update_enemy_tracking(total_seconds: float) -> void:
 		EventBus.record("enemy_tracking_lost", {})
 
 func _start_flight() -> void:
-	if GameManager.mode != "switching" or not GameManager.change_mode("cockpit"):
+	if GameManager.mode != "switching":
 		return
 	aircraft_position_km = WorldState.ship_position_km
 	aircraft_airborne = true
-	sorties_launched += 1
 	aircraft_destination = "contact"
+	sorties_launched += 1
+	if not GameManager.change_mode("cockpit"):
+		aircraft_airborne = false
+		aircraft_destination = "manual"
+		sorties_launched -= 1
+		return
+	if sortie_ship_standby:
+		WorldState.set_ship_command(WorldState.ship_heading_degrees, 0.0)
 	EventBus.record("aircraft_launched", {"position_km": aircraft_position_km})
-	_feedback("隼影侦察机升空；舰艇由最后航行命令托管")
+	_feedback("隼影侦察机升空；母舰停车待命" if sortie_ship_standby else "隼影侦察机升空；舰艇由最后航行命令托管")
 
 func _advance_aircraft(delta: float) -> void:
 	aircraft_fuel_seconds = maxf(0.0, aircraft_fuel_seconds - delta)
@@ -481,6 +565,25 @@ func _damage_enemy(amount: float, source: String) -> void:
 func _accept(message: String) -> bool:
 	_feedback(message)
 	return true
+
+func _action_allowed() -> bool:
+	if not GameManager.player_alive or GameManager.mode in ["settlement", "campaign_failed"]:
+		return _reject("行动已结束，无法下达该命令")
+	if get_tree().paused:
+		return _reject("模拟暂停，请继续后执行该操作")
+	return true
+
+func _sortie_readiness_error() -> String:
+	var task: TaskDefinition = DataManager.definitions.get(GameManager.current_task_id) as TaskDefinition
+	if task == null or not DataManager.errors.is_empty():
+		return "任务数据无效，无法出击；请返回菜单检查数据"
+	var ship: ShipDefinition = DataManager.definitions.get(task.ship_id) as ShipDefinition
+	var aircraft: AircraftDefinition = DataManager.definitions.get(task.aircraft_id) as AircraftDefinition
+	if ship == null or aircraft == null or not task.aircraft_id in ship.aircraft_ids:
+		return "舰机不兼容，无法配置出击"
+	if not GameManager.aircraft_operational or aircraft_fuel_seconds <= 0.0:
+		return "飞机不可用或燃油已耗尽"
+	return ""
 
 func _reject(message: String) -> bool:
 	_feedback(message)

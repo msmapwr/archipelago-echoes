@@ -35,7 +35,7 @@ static func project(state: Dictionary) -> Dictionary:
 	if mode == "configuration":
 		result.stage = "configure"
 		result.title = "准备出击"
-		result.next = "确认舰体、航速和燃油，再点击起飞。可取消配置返回舰桥。"
+		result.next = "核对燃油并选择母舰保持航行或停车待命，再开始出击；可取消返回舰桥。"
 	elif mode == "switching":
 		result.stage = "transfer"
 		result.title = "指挥权移交"
@@ -51,13 +51,15 @@ static func project(state: Dictionary) -> Dictionary:
 		var field_distance: float = state.get("airfield_distance", INF)
 		if state.get("ship_afloat", true) and ship_distance <= 2.0:
 			result.can_land = state.get("ship_speed", 0.0) <= 12.0
-			result.landing_reason = "已进入母舰 2 km 回收窗口；点击降落回舰。" if result.can_land else "母舰航速超过 12 kn，无法回收；导航友方机场，离开母舰回收窗口后再降落。"
+			result.landing_reason = "已进入母舰 2 km 回收窗口；点击降落回舰。" if result.can_land else "母舰航速超过 12 kn；请求母舰停车后降落，或转往友方机场。"
 		elif field_distance <= 3.0:
 			result.can_land = true
 			result.landing_reason = "已进入友方机场 3 km 回收窗口；点击降落。"
 		else:
 			result.landing_reason = "继续导航：母舰 %.1f km / 机场 %.1f km；回收窗口分别为 2 / 3 km。" % [ship_distance, field_distance]
 		result.next = result.landing_reason
+		if not identified:
+			result.next += " A1 未确认；可取消返航继续侦察。"
 	elif identified:
 		result.stage = "sortie"
 		result.title = "出击并安全回收"
@@ -81,7 +83,7 @@ static func project(state: Dictionary) -> Dictionary:
 		elif not state.get("ship_afloat", true):
 			result.warning = "母舰已沉没；立即导航友方机场并安全降落。"
 		elif state.get("ship_speed", 0.0) > 12.0:
-			result.warning = "母舰航速超过回收限制；可转往友方机场。"
+			result.warning = "母舰航速超过回收限制；可请求停车或转往机场。"
 	elif state.get("ship_health", 100.0) <= 40.0:
 		result.warning = "母舰严重受损；低速投入损管或调整航路脱离接触。"
 	elif state.get("tracking", false):

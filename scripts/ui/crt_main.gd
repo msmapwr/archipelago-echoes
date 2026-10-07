@@ -35,11 +35,17 @@ var objective_hint: Label
 var archive: Control
 var _archive_paused_world: bool = false
 var guidance: Dictionary = {}
+var sortie_configuration: VBoxContainer
+var sortie_details: Label
+var standby_checkbox: CheckBox
+var standby_button: Button
+var cancel_return_button: Button
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_apply_theme()
 	_build_guidance_ui()
+	_build_sortie_ui()
 	_connect_buttons()
 	radar.contact_selected.connect(_on_contact_selected)
 	radar.contact_deselected.connect(_on_contact_deselected)
@@ -85,6 +91,33 @@ func _build_guidance_ui() -> void:
 	terminal.add_child(archive)
 	archive.close_requested.connect(close_archive)
 	terminal.get_node("Footer/CommandArchive").pressed.connect(toggle_archive)
+
+func _build_sortie_ui() -> void:
+	sortie_configuration = VBoxContainer.new()
+	sortie_configuration.name = "SortieConfiguration"
+	details.add_child(sortie_configuration)
+	details.move_child(sortie_configuration, details.get_node("PhaseActions").get_index())
+	sortie_details = Label.new()
+	sortie_details.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	sortie_details.add_theme_color_override("font_color", Color("#b9d7bc"))
+	sortie_configuration.add_child(sortie_details)
+	standby_checkbox = CheckBox.new()
+	standby_checkbox.text = "飞机升空后母舰停车待命"
+	standby_checkbox.toggled.connect(func(enabled: bool) -> void: MissionController.set_sortie_ship_standby(enabled))
+	sortie_configuration.add_child(standby_checkbox)
+	var flight_requests := HBoxContainer.new()
+	flight_requests.add_theme_constant_override("separation", 6)
+	flight_controls.add_child(flight_requests)
+	standby_button = Button.new()
+	standby_button.text = "请求母舰停车"
+	standby_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	standby_button.pressed.connect(func() -> void: MissionController.request_ship_standby())
+	flight_requests.add_child(standby_button)
+	cancel_return_button = Button.new()
+	cancel_return_button.text = "取消返航"
+	cancel_return_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cancel_return_button.pressed.connect(func() -> void: MissionController.cancel_return())
+	flight_requests.add_child(cancel_return_button)
 
 func guidance_state() -> Dictionary:
 	return {"mode": GameManager.mode, "identified": GameManager.target_identified, "recovered": GameManager.player_recovered, "settled": GameManager.task_settled, "scans": MissionController.contact_scan_count, "contact_visible": MissionController.contact_visible, "launched": MissionController.sorties_launched > 0, "airborne": MissionController.aircraft_airborne, "switch_seconds": MissionController.switch_seconds_remaining, "ship_afloat": GameManager.ship_afloat, "ship_speed": WorldState.ship_speed_knots, "ship_health": MissionController.ship_health, "tracking": MissionController.enemy_tracking_ship, "contact_distance": MissionController.aircraft_position_km.distance_to(WorldState.contact_position_km), "ship_distance": MissionController.aircraft_position_km.distance_to(WorldState.ship_position_km), "airfield_distance": MissionController.aircraft_position_km.distance_to(MissionController.airfield_position_km), "flight_speed": MissionController.aircraft_speed_knots, "fuel_seconds": MissionController.aircraft_fuel_seconds, "death_reason": GameManager.last_death_reason}
@@ -165,10 +198,10 @@ func _connect_buttons() -> void:
 	_button("RadarActions/ToggleEmission").pressed.connect(func() -> void: MissionController.set_radar_emitting(not MissionController.radar_emitting))
 	_button("RadarActions/Identify").pressed.connect(func() -> void: MissionController.identify_contact())
 	_button("RadarActions/Fire").pressed.connect(func() -> void: MissionController.fire_ship_gun(selected_contact_id))
-	_button("ShipControls/HeadingControls/TurnPort").pressed.connect(func() -> void: WorldState.set_ship_command(WorldState.ship_heading_degrees - 15.0, WorldState.ship_speed_knots))
-	_button("ShipControls/HeadingControls/TurnStarboard").pressed.connect(func() -> void: WorldState.set_ship_command(WorldState.ship_heading_degrees + 15.0, WorldState.ship_speed_knots))
-	_button("ShipControls/SpeedControls/SlowDown").pressed.connect(func() -> void: WorldState.set_ship_command(WorldState.ship_heading_degrees, maxf(0.0, WorldState.ship_speed_knots - 5.0)))
-	_button("ShipControls/SpeedControls/SpeedUp").pressed.connect(func() -> void: WorldState.set_ship_command(WorldState.ship_heading_degrees, minf(WorldState.ship_max_speed_knots, WorldState.ship_speed_knots + 5.0)))
+	_button("ShipControls/HeadingControls/TurnPort").pressed.connect(func() -> void: MissionController.command_ship(WorldState.ship_heading_degrees - 15.0, WorldState.ship_speed_knots))
+	_button("ShipControls/HeadingControls/TurnStarboard").pressed.connect(func() -> void: MissionController.command_ship(WorldState.ship_heading_degrees + 15.0, WorldState.ship_speed_knots))
+	_button("ShipControls/SpeedControls/SlowDown").pressed.connect(func() -> void: MissionController.command_ship(WorldState.ship_heading_degrees, maxf(0.0, WorldState.ship_speed_knots - 5.0)))
+	_button("ShipControls/SpeedControls/SpeedUp").pressed.connect(func() -> void: MissionController.command_ship(WorldState.ship_heading_degrees, minf(WorldState.ship_max_speed_knots, WorldState.ship_speed_knots + 5.0)))
 	_button("ShipControls/DamageControl/Repair").pressed.connect(func() -> void: MissionController.start_damage_control())
 	_button("FlightControls/FlightHeadingControls/FlightPort").pressed.connect(func() -> void: MissionController.set_aircraft_heading(MissionController.aircraft_heading_degrees - 15.0))
 	_button("FlightControls/FlightHeadingControls/FlightStarboard").pressed.connect(func() -> void: MissionController.set_aircraft_heading(MissionController.aircraft_heading_degrees + 15.0))
@@ -344,7 +377,10 @@ func _refresh_ui() -> void:
 	_refresh_debrief()
 	_refresh_radar()
 	_refresh_gun_status()
+	_refresh_sortie_configuration()
 	ship_controls.visible = mode == "bridge" or mode == "configuration" or mode == "switching"
+	contact_status.visible = mode not in ["configuration", "switching"]
+	contact_details.visible = contact_status.visible
 	flight_controls.visible = mode == "cockpit" or mode == "returning"
 	debrief.visible = mode == "settlement" or mode == "campaign_failed"
 	details.get_node("RadarActions").visible = mode == "bridge"
@@ -364,10 +400,27 @@ func _refresh_ui() -> void:
 	_button("RadarActions/ToggleEmission").text = "雷达静默" if MissionController.radar_emitting else "开启雷达"
 	_button("RadarActions/Identify").disabled = get_tree().paused
 	_button("RadarActions/Fire").disabled = get_tree().paused
+	for path in ["PhaseActions/Prepare", "PhaseActions/Launch", "PhaseActions/Cancel", "PhaseActions/Return", "PhaseActions/Land", "FlightControls/FlightActions/Recon", "FlightControls/FlightActions/Attack"]:
+		_button(path).disabled = get_tree().paused
+	_button("PhaseActions/Settle").disabled = get_tree().paused or not GameManager.target_identified
+	cancel_return_button.disabled = get_tree().paused
+	cancel_return_button.visible = mode == "returning"
+	standby_button.disabled = not GameManager.ship_afloat or WorldState.ship_speed_knots == 0.0
 	pause_status.text = "已暂停 · 点击继续" if get_tree().paused else "运行中 · 空格暂停"
 	time_scale_button.text = "时间 ×%.0f" % WorldClock.time_scale
 	radar_range_button.text = "量程 %.1f km" % radar.display_range_km
 	action_status.text = MissionController.last_message
+
+func _refresh_sortie_configuration() -> void:
+	sortie_configuration.visible = GameManager.mode == "configuration" or GameManager.mode == "switching"
+	standby_checkbox.disabled = GameManager.mode != "configuration"
+	standby_checkbox.set_pressed_no_signal(MissionController.sortie_ship_standby)
+	var task: TaskDefinition = DataManager.definitions.get(GameManager.current_task_id) as TaskDefinition
+	var aircraft: AircraftDefinition = DataManager.definitions.get(task.aircraft_id) as AircraftDefinition if task != null else null
+	if aircraft == null:
+		sortie_details.text = "出击数据不可用；取消配置后检查任务数据。"
+		return
+	sortie_details.text = "出击配置 / %s\n巡航 %.0f kn · 余油 %.1f 分 · 对海弹 %d\n母舰托管 / %s\n移交期间世界继续运行，停车不免疫敌方攻击。" % [aircraft.display_name, MissionController.aircraft_speed_knots, MissionController.aircraft_fuel_seconds / 60.0, MissionController.aircraft_bombs, "实际升空后停车待命" if MissionController.sortie_ship_standby else "保持当前 %03.0f° / %.0f kn" % [WorldState.ship_heading_degrees, WorldState.ship_speed_knots]]
 
 func _refresh_gun_status() -> void:
 	var reason := MissionController.ship_gun_block_reason(selected_contact_id)
@@ -460,6 +513,9 @@ func _event_line(event: Dictionary) -> String:
 		"damage_control_completed": return "损管完成 · 舰体 %.0f%%" % details_data.get("health", 0.0)
 		"damage_control_aborted": return "母舰沉没，损管终止"
 		"aircraft_launched": return "隼影侦察机升空"
+		"sortie_configured": return "出击托管：停车待命" if details_data.get("ship_standby", false) else "出击托管：保持航行"
+		"ship_standby_requested": return "母舰收到空中待命请求"
+		"return_cancelled": return "返航取消，恢复飞行控制"
 		"aircraft_landed": return "飞机安全回收"
 		"enemy_destroyed": return "A1 失去战斗力"
 		"player_death": return "指挥官失联"

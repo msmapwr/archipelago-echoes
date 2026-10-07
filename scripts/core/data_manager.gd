@@ -30,6 +30,12 @@ func reload() -> bool:
 			errors.append("%s: cannot load resource" % path)
 			continue
 		register_definition(resource, path)
+	validate_catalog()
+	for error in errors:
+		push_error("[DataManager] " + error)
+	return errors.is_empty()
+
+func validate_catalog() -> bool:
 	var symbol_owners: Dictionary = {}
 	for definition in definitions.values():
 		if definition is ShipDefinition or definition is BuildingDefinition:
@@ -51,10 +57,11 @@ func reload() -> bool:
 			_require_reference(definition.id, definition.ship_id, ShipDefinition)
 			_require_reference(definition.id, definition.aircraft_id, AircraftDefinition)
 			_require_reference(definition.id, definition.target_contact_id, ContactDefinition)
+			var ship = definitions.get(definition.ship_id)
+			if ship is ShipDefinition and not definition.aircraft_id in ship.aircraft_ids:
+				errors.append("%s: aircraft %s is not supported by ship %s" % [definition.id, definition.aircraft_id, definition.ship_id])
 		elif definition is ContactDefinition and not definition.identified_ship_id.is_empty():
 			_require_reference(definition.id, definition.identified_ship_id, ShipDefinition)
-	for error in errors:
-		push_error("[DataManager] " + error)
 	return errors.is_empty()
 
 func register_definition(resource: Resource, source: String) -> bool:
@@ -74,7 +81,34 @@ func register_definition(resource: Resource, source: String) -> bool:
 	if definitions.has(definition.id):
 		errors.append("%s: duplicate id %s" % [source, definition.id])
 		return false
+	if not _validate_fields(definition, source):
+		return false
 	definitions[definition.id] = definition
+	return true
+
+func _validate_fields(definition: GameDefinition, source: String) -> bool:
+	var positive_fields: PackedStringArray = []
+	if definition is ShipDefinition:
+		positive_fields = ["max_speed_knots"]
+	elif definition is AircraftDefinition:
+		positive_fields = ["cruise_speed_knots", "fuel_minutes"]
+	elif definition is WeaponDefinition:
+		positive_fields = ["range_km"]
+	elif definition is ContactDefinition:
+		positive_fields = ["range_km"]
+		if not is_finite(definition.bearing_degrees) or definition.bearing_degrees < 0 or definition.bearing_degrees >= 360:
+			errors.append("%s: bearing_degrees must be finite and in [0, 360)" % source)
+			return false
+	elif definition is TaskDefinition:
+		for field in ["ship_id", "aircraft_id", "target_contact_id", "objective"]:
+			if str(definition.get(field)).strip_edges().is_empty():
+				errors.append("%s: missing %s" % [source, field])
+				return false
+	for field in positive_fields:
+		var value: float = definition.get(field)
+		if not is_finite(value) or value <= 0:
+			errors.append("%s: %s must be finite and positive" % [source, field])
+			return false
 	return true
 
 func get_definition(id: String) -> GameDefinition:
