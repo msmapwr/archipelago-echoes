@@ -7,6 +7,7 @@ func _initialize() -> void:
 	call_deferred("_run")
 
 func _run() -> void:
+	root.get_node("UserSettings").tutorial_completed = false # First-run preparation fixture; no persistent write.
 	var mission: Node = root.get_node("MissionController")
 	var clock: Node = root.get_node("WorldClock")
 	var world: Node = root.get_node("WorldState")

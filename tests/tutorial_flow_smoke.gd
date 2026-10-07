@@ -7,6 +7,14 @@ func _initialize() -> void:
 	call_deferred("_run")
 
 func _run() -> void:
+	var settings: Node = root.get_node("UserSettings")
+	var original_progress_path: String = settings.tutorial_progress_path
+	var original_completed: bool = settings.tutorial_completed
+	var original_error: String = settings.tutorial_progress_error
+	var progress_path := "user://qa_tutorial_%d.cfg" % Time.get_ticks_usec()
+	settings.tutorial_progress_path = progress_path
+	settings.load_tutorial_progress()
+	_check(not settings.tutorial_completed, "missing tutorial record defaults to first run")
 	var model = Simulation.new()
 	_check(not model.act("fire") and not model.fired and model.step == 0, "cannot fire before observing and identifying")
 	model.act("scan")
@@ -81,6 +89,9 @@ func _run() -> void:
 	for action in ["scan", "identify", "fire", "turn", "throttle", "pause", "pause", "launch", "return", "land"]:
 		trainer.action_buttons[action].emit_signal("pressed")
 	_check(not prep.advance_button.disabled, "completed tutorial enables continuation")
+	_check(settings.tutorial_completed and FileAccess.file_exists(progress_path), "actual tutorial completion persists independently of display settings")
+	settings.tutorial_completed = false
+	_check(settings.load_tutorial_progress() and settings.tutorial_completed, "tutorial completion survives reload")
 	_check(paused and clock.elapsed_seconds == seconds and mission.ship_health == health and mission.ship_ammo == ammo and mission.aircraft_fuel_seconds == fuel and world.ship_position_km == position and events.history.size() == event_count and not game.target_identified, "rehearsal preserves live clock, combat resources, world, events and mission flags")
 	_check(trainer.replay_button.get_global_rect().end.y < prep.get_global_rect().position.y + 678, "tutorial controls stay inside CRT glass")
 	trainer.replay_button.emit_signal("pressed")
@@ -105,6 +116,27 @@ func _run() -> void:
 	shell.get_node("StartButton").emit_signal("pressed")
 	var fresh: Control = shell.get_node("GameCRTSlot/Preparation")
 	_check(fresh.accepted_task_id.is_empty() and not fresh.tutorial.simulation.ready_to_continue(), "new session does not inherit command or skipped training")
+	fresh.advance()
+	fresh.advance()
+	_check(fresh.stage == "background" and fresh.replay_tutorial_button.visible, "returning player has explicit replay entry")
+	fresh.advance()
+	_check(fresh.stage == "orders", "completed tutorial is automatically omitted on later starts")
+	fresh.replay_tutorial_button.emit_signal("pressed")
+	_check(fresh.stage == "tutorial" and fresh.advance_button.disabled and settings.tutorial_completed, "manual replay requires actions without erasing past completion")
+	fresh.tutorial.skip_button.emit_signal("pressed")
+	fresh.advance()
+	_check(fresh.stage == "orders", "manual replay returns to command briefing")
+	settings.tutorial_progress_path = progress_path + ".first_skip"
+	settings.load_tutorial_progress()
+	fresh.replay_tutorial()
+	fresh.tutorial.skip()
+	_check(not settings.tutorial_completed and not FileAccess.file_exists(settings.tutorial_progress_path), "skipping does not falsely record tutorial completion")
+	settings.tutorial_progress_path = "user://qa_missing_tutorial_%d/progress.cfg" % Time.get_ticks_usec()
+	_check(not settings.mark_tutorial_completed() and not settings.tutorial_completed and not settings.tutorial_progress_error.is_empty(), "failed persistence leaves explicit error and no false saved completion")
+	DirAccess.remove_absolute(progress_path)
+	settings.tutorial_progress_path = original_progress_path
+	settings.tutorial_completed = original_completed
+	settings.tutorial_progress_error = original_error
 	fresh.menu_requested.emit()
 	if failures.is_empty():
 		print("Tutorial and briefing smoke test passed")

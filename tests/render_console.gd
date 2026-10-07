@@ -4,6 +4,7 @@ func _initialize() -> void:
 	call_deferred("_capture")
 
 func _capture() -> void:
+	root.get_node("UserSettings").tutorial_completed = false # Capture named preparation pages independently of local profile.
 	var shell: Control = load("res://scenes/main/console_shell.tscn").instantiate()
 	root.add_child(shell)
 	var capture_mode := OS.get_environment("CONSOLE_CAPTURE_MODE")

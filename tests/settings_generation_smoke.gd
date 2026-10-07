@@ -7,6 +7,7 @@ func _initialize() -> void:
 	call_deferred("_run")
 
 func _run() -> void:
+	root.get_node("UserSettings").tutorial_completed = false # Keep page-count assertions independent of the user's profile.
 	var path := "user://qa_preferences_%d.cfg" % Time.get_ticks_usec()
 	var preferences = Preferences.new()
 	preferences.master_volume = 37

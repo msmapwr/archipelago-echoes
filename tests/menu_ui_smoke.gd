@@ -6,6 +6,7 @@ func _initialize() -> void:
 	call_deferred("_run")
 
 func _run() -> void:
+	root.get_node("UserSettings").tutorial_completed = false # Exercise first-run pages without modifying the saved record.
 	var shell: Control = load("res://scenes/main/console_shell.tscn").instantiate()
 	root.add_child(shell)
 	var clock: Node = root.get_node("WorldClock")

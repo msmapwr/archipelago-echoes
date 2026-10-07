@@ -22,6 +22,7 @@ var body: Label
 var body_scroll: ScrollContainer
 var progress: Label
 var advance_button: Button
+var replay_tutorial_button: Button
 var settings_form: VBoxContainer
 var generation_form: VBoxContainer
 var volume_input: HSlider
@@ -91,6 +92,7 @@ func _ready() -> void:
 	tutorial.hide()
 	column.add_child(tutorial)
 	tutorial.readiness_changed.connect(_refresh_tutorial_gate)
+	tutorial.completed.connect(_on_tutorial_completed)
 	var actions := HBoxContainer.new()
 	actions.add_theme_constant_override("separation", 24)
 	column.add_child(actions)
@@ -98,6 +100,10 @@ func _ready() -> void:
 	menu_button.text = "返回主菜单"
 	menu_button.pressed.connect(func() -> void: menu_requested.emit())
 	actions.add_child(menu_button)
+	replay_tutorial_button = Button.new()
+	replay_tutorial_button.text = "重播新手教程"
+	replay_tutorial_button.pressed.connect(replay_tutorial)
+	actions.add_child(replay_tutorial_button)
 	advance_button = Button.new()
 	advance_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	advance_button.pressed.connect(advance)
@@ -123,7 +129,20 @@ func advance() -> void:
 		departure_requested.emit()
 		return
 	page_index += 1
+	if PAGES[page_index]["id"] == "tutorial" and UserSettings.tutorial_completed:
+		page_index += 1
 	_refresh_page()
+
+func replay_tutorial() -> void:
+	if stage not in ["background", "orders"]:
+		return
+	page_index = 3
+	tutorial.replay()
+	_refresh_page()
+
+func _on_tutorial_completed() -> void:
+	if not UserSettings.mark_tutorial_completed():
+		tutorial.feedback.text = UserSettings.tutorial_progress_error
 
 func _refresh_page() -> void:
 	var page: Dictionary = PAGES[page_index]
@@ -138,6 +157,9 @@ func _refresh_page() -> void:
 	generation_form.visible = stage == "generation"
 	tutorial.visible = stage == "tutorial"
 	advance_button.text = page["action"]
+	replay_tutorial_button.visible = UserSettings.tutorial_completed and stage in ["background", "orders"]
+	if stage == "background" and UserSettings.tutorial_completed:
+		advance_button.text = "继续阅读命令"
 	advance_button.disabled = stage == "generation" and not generation_ready
 	if stage in ["background", "orders"]:
 		if _load_task():

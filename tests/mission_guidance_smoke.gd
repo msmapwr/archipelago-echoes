@@ -7,6 +7,7 @@ func _initialize() -> void:
 	call_deferred("_run")
 
 func _run() -> void:
+	root.get_node("UserSettings").tutorial_completed = false # First-run preparation fixture; no persistent write.
 	_check(Guidance.project({}).stage == "search", "no observations directs active search")
 	_check(Guidance.project({"scans": 1, "contact_visible": false}).next.contains("回波中断"), "lost contact supplies recovery direction")
 	_check(Guidance.project({"identified": true}).stage == "sortie", "identification alone does not claim mission success")

@@ -1,6 +1,7 @@
 extends VBoxContainer
 
 signal readiness_changed
+signal completed
 
 const Simulation = preload("res://scripts/core/tutorial_simulation.gd")
 const Decay = preload("res://scripts/ui/phosphor_decay.gd")
@@ -106,8 +107,11 @@ func _process(delta: float) -> void:
 	_refresh_telemetry()
 
 func perform(action: String) -> void:
+	var was_complete: bool = simulation.ready_to_continue()
 	simulation.act(action)
 	_refresh()
+	if not was_complete and simulation.ready_to_continue() and not simulation.skipped:
+		completed.emit()
 	readiness_changed.emit()
 
 func skip() -> void:

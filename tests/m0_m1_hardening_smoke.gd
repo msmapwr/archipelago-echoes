@@ -7,6 +7,7 @@ func _initialize() -> void:
 	call_deferred("_run")
 
 func _run() -> void:
+	root.get_node("UserSettings").tutorial_completed = false # First-run preparation fixture; no persistent write.
 	var data: Node = root.get_node("DataManager")
 	for field in ["cruise_speed_knots", "fuel_minutes"]:
 		for invalid in [0.0, -1.0, NAN, INF]:
