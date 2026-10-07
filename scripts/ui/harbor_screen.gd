@@ -43,8 +43,11 @@ class HarborChart extends Control:
 		draw_dashed_line(_point(Vector2.ZERO), _point(Vector2(0, Navigation.EXIT_Y_KM)), Color("#5c9971"), 1.0, 8.0)
 		var ship := _point(navigation.position_km)
 		var direction := Vector2(sin(deg_to_rad(navigation.heading_degrees)), -cos(deg_to_rad(navigation.heading_degrees)))
-		var side := Vector2(-direction.y, direction.x)
-		draw_colored_polygon(PackedVector2Array([ship + direction * 13, ship - direction * 8 + side * 6, ship - direction * 8 - side * 6]), Color("#a5f1ba"))
+		preload("res://scripts/data/unit_glyph.gd").draw(self, ship, 42, "ship.escort_carrier", Color("#a5f1ba"))
+		draw_line(ship + direction * 25, ship + direction * 36, Color("#a5f1ba"), 2)
+		draw_line(ship + direction * 36, ship + direction * 36 - direction.rotated(0.6) * 7, Color("#a5f1ba"), 2)
+		draw_line(ship + direction * 36, ship + direction * 36 - direction.rotated(-0.6) * 7, Color("#a5f1ba"), 2)
+		preload("res://scripts/data/unit_glyph.gd").draw(self, Vector2(80, size.y - 90), 64, "building.port", Color("#a4c6af"), "medium", 1, true)
 		draw_string(get_theme_default_font(), Vector2(35, size.y - 40), "港区平面图 · 码头 / 防波堤", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color("#a4c6af"))
 
 func _ready() -> void:

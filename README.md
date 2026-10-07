@@ -48,6 +48,8 @@ godot --headless --path . --script res://tests/m1_mission_smoke.gd
 godot --headless --path . --script res://tests/damage_control_smoke.gd
 godot --headless --path . --script res://tests/harbor_navigation_smoke.gd
 godot --headless --path . --script res://tests/radar_visual_smoke.gd
+godot --headless --path . --script res://tests/unit_icon_smoke.gd
+godot --headless --path . --script res://tests/unit_library_flow_smoke.gd
 godot --headless --path . --script res://tests/settings_generation_smoke.gd
 godot --headless --path . --script res://tests/tutorial_flow_smoke.gd
 godot --headless --path . --script res://tests/mission_guidance_smoke.gd
@@ -60,5 +62,7 @@ godot --path . --script res://tests/m1_ui_smoke.gd
 最后一项使用图形窗口检查嵌入主界面后的 CRT 鼠标输入。控制台分区与比例说明见 [UI 布局说明](docs/ui-shell.md)；规则、已验证分支和原型限制见 [M1 首关说明](docs/m1-vertical-slice.md)；版本变更见 [CHANGELOG](CHANGELOG.md)。
 
 ## 项目状态
+
+单位图鉴：游戏中按 **F2**，或在编辑器运行 `scenes/unit_showcase.tscn`。可浏览六类舰艇与八类设施、三尺寸各十形态，缩放/灰度审查，并导出 PNG、SVG、结构 JSON 和全库图集到 Godot 用户目录 `icons`。图鉴关闭时保留原先的暂停状态。图标和后续拼装规格见 [单位图标规范](docs/unit-icon-spec.md)。
 
 首关的自动化闭环已通过。实际玩家游玩记录、长期平衡、更多关卡、完整海空战和战役系统仍在后续阶段。仓库根目录存放 Godot 场景、脚本、样例数据与测试；`docs/` 存放计划和设计决策，`AGENTS.md` 为开发规范。

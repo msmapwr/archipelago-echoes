@@ -3,6 +3,10 @@ extends Control
 signal menu_requested
 
 const Guidance = preload("res://scripts/core/mission_guidance.gd")
+var unit_library: PanelContainer
+var _library_paused_world := false
+var contact_icon: Control
+var library_shade: ColorRect
 
 @onready var terminal: Control = $ScreenContainer/ScreenViewport/Terminal
 @onready var radar: Control = terminal.get_node("Content/RadarFrame/Radar")
@@ -46,6 +50,7 @@ func _ready() -> void:
 	_apply_theme()
 	_build_guidance_ui()
 	_build_sortie_ui()
+	_build_unit_library()
 	_connect_buttons()
 	radar.contact_selected.connect(_on_contact_selected)
 	radar.contact_deselected.connect(_on_contact_deselected)
@@ -66,6 +71,52 @@ func _ready() -> void:
 	_refresh_ui()
 	_on_world_time_advanced(WorldClock.elapsed_seconds)
 	_on_event_recorded({})
+
+func _build_unit_library() -> void:
+	library_shade = ColorRect.new()
+	library_shade.color = Color(0, 0.015, 0.008, 0.88)
+	library_shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	library_shade.hide()
+	terminal.add_child(library_shade)
+	unit_library = preload("res://scenes/unit_showcase.tscn").instantiate()
+	unit_library.hide()
+	terminal.add_child(unit_library)
+	unit_library.close_requested.connect(close_unit_library)
+	var button := Button.new()
+	button.text = "图鉴 / F2"
+	button.pressed.connect(toggle_unit_library)
+	terminal.get_node("Footer").add_child(button)
+	contact_icon = preload("res://scripts/ui/unit_icon.gd").new()
+	contact_icon.custom_minimum_size = Vector2(150, 150)
+	contact_icon.pixels = 140
+	contact_icon.hide()
+	details.add_child(contact_icon)
+	details.move_child(contact_icon, contact_details.get_index() + 1)
+
+func toggle_unit_library() -> void:
+	if archive.visible:
+		return
+	if unit_library.visible:
+		close_unit_library()
+		return
+	_library_paused_world = not get_tree().paused
+	if _library_paused_world:
+		GameManager.set_paused(true)
+	unit_library.show()
+	library_shade.show()
+	library_shade.move_to_front()
+	unit_library.move_to_front()
+	terminal.get_node("GlassOverlay").move_to_front()
+	unit_library.family_picker.grab_focus()
+	_refresh_ui()
+
+func close_unit_library() -> void:
+	unit_library.hide()
+	library_shade.hide()
+	if _library_paused_world and GameManager.mode not in ["settlement", "campaign_failed"]:
+		GameManager.set_paused(false)
+	_library_paused_world = false
+	_refresh_ui()
 
 func _build_guidance_ui() -> void:
 	var strip := VBoxContainer.new()
@@ -132,6 +183,8 @@ func _refresh_guidance() -> void:
 	objective_hint.add_theme_color_override("font_color", Color("#e8b968") if not guidance.warning.is_empty() else Color("#a2c0a9"))
 
 func toggle_archive() -> void:
+	if unit_library != null and unit_library.visible:
+		return
 	if archive.visible:
 		close_archive()
 		return
@@ -183,6 +236,16 @@ func _archive_history() -> String:
 	return "行动记录 / 最近 40 条（重复复测省略）\n\n" + ("尚无记录。" if lines.is_empty() else "\n".join(lines))
 
 func _input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F2:
+		toggle_unit_library()
+		get_viewport().set_input_as_handled()
+		return
+	if unit_library != null and unit_library.visible:
+		if event.is_action_pressed("ui_cancel"):
+			close_unit_library()
+		if event.is_action_pressed("ui_cancel") or event.is_action_pressed("pause_simulation"):
+			get_viewport().set_input_as_handled()
+		return
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F1:
 		toggle_archive()
 		get_viewport().set_input_as_handled()
@@ -284,6 +347,8 @@ func _button_style(background: Color, border: Color) -> StyleBoxFlat:
 	return style
 
 func _unhandled_input(event: InputEvent) -> void:
+	if unit_library.visible:
+		return
 	if archive != null and archive.visible:
 		return
 	if event.is_action_pressed("ui_cancel"):
@@ -294,13 +359,13 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 func _toggle_pause() -> void:
-	if archive.visible or GameManager.mode in ["settlement", "campaign_failed"]:
+	if archive.visible or unit_library.visible or GameManager.mode in ["settlement", "campaign_failed"]:
 		return
 	GameManager.set_paused(not get_tree().paused)
 	_refresh_ui()
 
 func _toggle_time_scale() -> void:
-	if archive.visible or GameManager.mode in ["settlement", "campaign_failed"]:
+	if archive.visible or unit_library.visible or GameManager.mode in ["settlement", "campaign_failed"]:
 		return
 	WorldClock.set_time_scale(10.0 if WorldClock.time_scale == 1.0 else 1.0)
 	_refresh_ui()
@@ -434,6 +499,15 @@ func _refresh_gun_status() -> void:
 	radar.set_gun_solution(GameManager.mode == "bridge", reason.is_empty(), weapon_range)
 
 func _refresh_contact() -> void:
+	contact_icon.visible = GameManager.target_identified and selected_contact_id == MissionController.CONTACT_ID
+	if contact_icon.visible:
+		var contact: ContactDefinition = DataManager.get_definition(MissionController.CONTACT_ID) as ContactDefinition
+		var ship: ShipDefinition = DataManager.get_definition(contact.identified_ship_id) as ShipDefinition if contact != null else null
+		if ship != null:
+			contact_icon.family = ship.visual_family_id
+			contact_icon.size_class = ship.size_class
+			contact_icon.variant = ship.shape_variant
+			contact_icon.queue_redraw()
 	if not MissionController.enemy_alive:
 		contact_status.text = "A1 / 目标失能"
 	elif not MissionController.radar_emitting:

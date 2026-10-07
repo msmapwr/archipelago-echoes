@@ -14,7 +14,6 @@ const AMBER := Color("#e7b66c")
 const OWN_SHIP := Color("#83bad1")
 const ECHO_LIFETIME_SECONDS := 95.0
 const Decay = preload("res://scripts/ui/phosphor_decay.gd")
-const Symbols = preload("res://scripts/data/unit_visual_catalog.gd")
 
 var contact_id: String = ""
 var contact_visible: bool = false
@@ -259,7 +258,7 @@ func _draw_ownship(center: Vector2, radius: float) -> void:
 	if flight_navigation:
 		_draw_plane(center, own_heading_degrees)
 	elif ship != null:
-		_draw_unit_symbol(center, ship.visual_family_id, OWN_SHIP, own_heading_degrees, ship.symbol_texture)
+		_draw_unit_symbol(center, ship.visual_family_id, OWN_SHIP, own_heading_degrees, ship.symbol_texture, ship.size_class, ship.shape_variant)
 	draw_arc(center, 12.0, 0.0, TAU, 32, Color("#3c7977"), 1.0)
 	if aircraft_visible and not flight_navigation:
 		var offset := aircraft_position_km - own_position_km
@@ -306,16 +305,18 @@ func _draw_recovery_marker(center: Vector2, radius: float, world_point: Vector2,
 func contact_energy() -> float:
 	return Decay.energy(WorldClock.elapsed_seconds - MissionController.last_contact_seconds, ECHO_LIFETIME_SECONDS)
 
-func _draw_unit_symbol(point: Vector2, family: String, tint: Color, heading: float = 0.0, texture: Texture2D = null) -> void:
+func _draw_unit_symbol(point: Vector2, family: String, tint: Color, heading: float = NAN, texture: Texture2D = null, size_class: String = "medium", variant: int = 1) -> void:
+	var pixels := clampf(34.0 * MAX_RANGE_KM / display_range_km, 32, 48)
 	if texture != null:
-		draw_set_transform(point, deg_to_rad(heading))
-		draw_texture_rect(texture, Rect2(-12, -12, 24, 24), false, tint)
-		draw_set_transform(Vector2.ZERO)
-		return
-	var outline := Symbols.symbol_outline(family)
-	for index in range(outline.size()):
-		outline[index] = point + outline[index].rotated(deg_to_rad(heading))
-	draw_polyline(outline, tint, 1.5, true)
+		draw_texture_rect(texture, Rect2(point - Vector2.ONE * pixels * 0.5, Vector2.ONE * pixels), false, tint)
+	else:
+		preload("res://scripts/data/unit_glyph.gd").draw(self, point, pixels, family, tint, size_class, variant)
+	if family.begins_with("ship.") and is_finite(heading):
+		var direction := Vector2.UP.rotated(deg_to_rad(heading))
+		var tip := point + direction * (pixels * 0.5 + 11)
+		draw_line(tip - direction * 7, tip, tint)
+		draw_line(tip, tip - direction.rotated(0.6) * 5, tint)
+		draw_line(tip, tip - direction.rotated(-0.6) * 5, tint)
 
 func _draw_contact(_center: Vector2, _radius: float) -> void:
 	if not contact_visible:
@@ -326,15 +327,26 @@ func _draw_contact(_center: Vector2, _radius: float) -> void:
 	draw_circle(point, 22.0, Color(tint, 0.045 * strength))
 	draw_circle(point, 12.0, Color(tint, 0.10 * strength))
 	draw_circle(point, 6.0, Color(tint, 0.3 * strength))
-	draw_circle(point, 3.2, Color(HOT if contact_confirmed else tint, strength))
+	if not contact_confirmed:
+		if MissionController.contact_scan_count < 2:
+			preload("res://scripts/data/unit_glyph.gd").unknown(self, point, Color(tint, strength))
+		else:
+			var definition: ContactDefinition = DataManager.get_definition(contact_id) as ContactDefinition
+			var category: ShipDefinition = DataManager.get_definition(definition.identified_ship_id) as ShipDefinition if definition != null else null
+			if category != null:
+				# Category stage uses canonical geometry; model/size/variant remain concealed.
+				_draw_unit_symbol(point, category.visual_family_id, Color(tint, strength))
 	if contact_confirmed:
 		var contact: ContactDefinition = DataManager.get_definition(contact_id) as ContactDefinition
 		if contact != null and not contact.identified_ship_id.is_empty():
 			var ship: ShipDefinition = DataManager.get_definition(contact.identified_ship_id) as ShipDefinition
 			if ship != null:
-				_draw_unit_symbol(point, ship.visual_family_id, Color(tint, strength), 0.0, ship.symbol_texture)
+				_draw_unit_symbol(point, ship.visual_family_id, Color(tint, strength), NAN, ship.symbol_texture, ship.size_class, ship.shape_variant)
 	if contact_selected_state:
 		draw_arc(point, 17.0, 0.0, TAU, 40, AMBER, 1.5, true)
+	# Neutral contact bracket; identity is not assumed before confirmation.
+	draw_line(point + Vector2(-19, -19), point + Vector2(-11, -19), Color(tint, strength))
+	draw_line(point + Vector2(-19, -19), point + Vector2(-19, -11), Color(tint, strength))
 	if contact_confirmed or contact_selected_state:
 		draw_string(ThemeDB.fallback_font, point + Vector2(21, -8), "A1 / TRACK" if contact_confirmed else "A1 / SELECTED", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, tint)
 

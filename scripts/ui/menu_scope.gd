@@ -50,8 +50,8 @@ func _draw() -> void:
 	draw_circle(echo, 21.0, Color(0.48, 1.0, 0.6, 0.045 * pulse))
 	draw_circle(echo, 13.0, Color(0.48, 1.0, 0.6, 0.1 * pulse))
 	draw_circle(echo, 6.0, Color(0.48, 1.0, 0.6, 0.3 * pulse))
-	draw_circle(echo, 2.8, Color(HOT, pulse))
-	draw_circle(center, 4.0, Color("#88bace"))
+	preload("res://scripts/data/unit_glyph.gd").unknown(self, echo, Color(HOT, pulse))
+	preload("res://scripts/data/unit_glyph.gd").draw(self, center, 36, "ship.escort_carrier", Color("#88bace"))
 	draw_arc(center, 12.0, 0.0, TAU, 48, Color("#478d8d"), 1.0)
 	var font := ThemeDB.fallback_font
 	draw_string(font, center + Vector2(-7, -radius - 11), "N", HORIZONTAL_ALIGNMENT_LEFT, -1, 17, PHOSPHOR)

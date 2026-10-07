@@ -1,8 +1,8 @@
 extends RefCounted
 
-# These are asset slots, not finished silhouettes. Instances retain their own ID.
+# Stable structural asset IDs. Instances retain their own ID.
 const SHIP_KINDS := ["escort_carrier", "carrier", "destroyer", "cruiser", "battleship", "submarine"]
-const BUILDING_KINDS := ["port", "airfield", "headquarters", "city", "barracks", "factory", "radar_station"]
+const BUILDING_KINDS := ["port", "airfield", "headquarters", "city", "barracks", "factory", "radar_station", "drydock"]
 const SIZE_CLASSES := ["small", "medium", "large"]
 const MIN_VARIANTS := 10
 
@@ -18,7 +18,7 @@ static func variant_slots(family: String, size_class: String) -> PackedStringArr
 	return slots
 
 static func symbol_outline(family: String) -> PackedVector2Array:
-	# Category placeholders; later assets may override these via the stable family ID.
+	# Legacy outline API; live UI renders the structural source in unit_glyph.gd.
 	match family:
 		"ship.escort_carrier": return PackedVector2Array([Vector2(-5,-10), Vector2(5,-10), Vector2(5,8), Vector2(0,11), Vector2(-5,8), Vector2(-5,-10)])
 		"ship.carrier": return PackedVector2Array([Vector2(-7,-11), Vector2(7,-11), Vector2(7,9), Vector2(-7,9), Vector2(-7,-11)])
