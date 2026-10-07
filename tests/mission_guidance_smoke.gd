@@ -110,6 +110,7 @@ func _run() -> void:
 	mission.launch_sortie()
 	clock.advance(5)
 	mission.begin_return()
+	mission.set_aircraft_destination("airfield")
 	mission.aircraft_position_km = mission.airfield_position_km
 	mission.land_aircraft()
 	_check(game.mode == "recovered" and main.guidance.stage == "incomplete" and main._button("PhaseActions/MainMenu").visible and main._button("PhaseActions/Restart").visible, "unidentified airfield recovery provides actual restart and menu exits")

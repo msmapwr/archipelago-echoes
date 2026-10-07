@@ -2,6 +2,7 @@ extends Control
 
 signal contact_selected(contact_id: String)
 signal contact_deselected
+signal waypoint_requested(position_km: Vector2)
 
 const MAX_RANGE_KM := 25.0
 const DARK := Color("#031008")
@@ -34,6 +35,30 @@ var display_range_km: float = MAX_RANGE_KM
 var gun_arc_visible: bool = false
 var gun_ready: bool = false
 var gun_range_km: float = 10.0
+var flight_navigation: bool = false
+var carrier_position_km: Vector2 = Vector2.ZERO
+var carrier_afloat: bool = true
+var airfield_position_km: Vector2 = Vector2.ZERO
+var navigation_target_km: Vector2 = Vector2.ZERO
+var navigation_target_visible: bool = false
+var _keyboard_offset_km: Vector2 = Vector2.ZERO
+
+func set_flight_navigation(enabled: bool, carrier: Vector2, afloat: bool, airfield: Vector2, solution: Dictionary) -> void:
+	if flight_navigation != enabled:
+		_keyboard_offset_km = Vector2.ZERO
+	flight_navigation = enabled
+	carrier_position_km = carrier
+	carrier_afloat = afloat
+	airfield_position_km = airfield
+	navigation_target_visible = enabled and solution.get("available", false)
+	navigation_target_km = solution.get("position_km", own_position_km)
+	focus_mode = Control.FOCUS_ALL if enabled else Control.FOCUS_NONE
+	tooltip_text = "右键设置航点；聚焦雷达后用方向键定位、Enter 确认" if enabled else "点击回波选择接触"
+	queue_redraw()
+
+func point_to_world(local_point: Vector2) -> Vector2:
+	var radius := minf(size.x, size.y) * 0.435
+	return own_position_km + (local_point - size * 0.5) * display_range_km / radius
 
 func set_display_range(value: float) -> void:
 	display_range_km = value
@@ -118,6 +143,24 @@ func clear_selection() -> void:
 	queue_redraw()
 
 func _gui_input(event: InputEvent) -> void:
+	if flight_navigation and event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
+		if event.position.distance_to(size * 0.5) <= minf(size.x, size.y) * 0.435:
+			waypoint_requested.emit(point_to_world(event.position))
+			accept_event()
+		return
+	if flight_navigation and event is InputEventKey and event.pressed:
+		var step := display_range_km / 20.0
+		match event.keycode:
+			KEY_LEFT: _keyboard_offset_km.x -= step
+			KEY_RIGHT: _keyboard_offset_km.x += step
+			KEY_UP: _keyboard_offset_km.y -= step
+			KEY_DOWN: _keyboard_offset_km.y += step
+			KEY_ENTER, KEY_KP_ENTER: waypoint_requested.emit(own_position_km + _keyboard_offset_km)
+			_: return
+		_keyboard_offset_km = _keyboard_offset_km.limit_length(display_range_km)
+		accept_event()
+		queue_redraw()
+		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 		if contact_visible and event.position.distance_to(_contact_position()) <= 23.0:
 			contact_selected_state = true
@@ -143,6 +186,8 @@ func _draw() -> void:
 	if sweep_enabled:
 		_draw_sweep(center, radius)
 	_draw_ownship(center, radius)
+	if flight_navigation:
+		_draw_navigation(center, radius)
 	_draw_contact(center, radius)
 	_draw_readout(center, radius)
 	if hull_integrity < 50.0:
@@ -211,14 +256,52 @@ func _draw_ownship(center: Vector2, radius: float) -> void:
 	draw_circle(center, 4.0, Color("#b7dbe0"))
 	var task: TaskDefinition = DataManager.get_definition(GameManager.current_task_id) as TaskDefinition
 	var ship: ShipDefinition = DataManager.get_definition(task.ship_id) as ShipDefinition if task != null else null
-	if ship != null:
+	if flight_navigation:
+		_draw_plane(center, own_heading_degrees)
+	elif ship != null:
 		_draw_unit_symbol(center, ship.visual_family_id, OWN_SHIP, own_heading_degrees, ship.symbol_texture)
 	draw_arc(center, 12.0, 0.0, TAU, 32, Color("#3c7977"), 1.0)
-	if aircraft_visible:
+	if aircraft_visible and not flight_navigation:
 		var offset := aircraft_position_km - own_position_km
 		if offset.length() <= display_range_km:
 			var point := center + offset * radius / display_range_km
-			draw_colored_polygon(PackedVector2Array([point + Vector2(0, -8), point + Vector2(-6, 6), point + Vector2(6, 6)]), OWN_SHIP)
+			_draw_plane(point, MissionController.aircraft_heading_degrees)
+
+func _draw_plane(point: Vector2, heading: float) -> void:
+	var outline := PackedVector2Array([Vector2(0, -10), Vector2(-8, 6), Vector2(0, 2), Vector2(8, 6), Vector2(0, -10)])
+	for index in range(outline.size()):
+		outline[index] = point + outline[index].rotated(deg_to_rad(heading))
+	draw_polyline(outline, OWN_SHIP, 1.8, true)
+
+func _draw_navigation(center: Vector2, radius: float) -> void:
+	if carrier_afloat:
+		var task: TaskDefinition = DataManager.definitions.get(GameManager.current_task_id) as TaskDefinition
+		var ship: ShipDefinition = DataManager.definitions.get(task.ship_id) as ShipDefinition if task != null else null
+		if ship != null:
+			_draw_recovery_marker(center, radius, carrier_position_km, "CV", 2.0, OWN_SHIP, ship.visual_family_id, WorldState.ship_heading_degrees, ship.symbol_texture)
+	_draw_recovery_marker(center, radius, airfield_position_km, "AF", 3.0, COAST, "building.airfield")
+	if navigation_target_visible:
+		var offset := (navigation_target_km - own_position_km) * radius / display_range_km
+		var point := center + offset.limit_length(radius - 18.0)
+		draw_line(center, point, Color(AMBER, 0.48), 1.0, true)
+		draw_arc(point, 7.0, 0.0, TAU, 24, AMBER, 1.4, true)
+		draw_line(point + Vector2(-10, 0), point + Vector2(10, 0), AMBER, 1.0)
+		draw_line(point + Vector2(0, -10), point + Vector2(0, 10), AMBER, 1.0)
+	if has_focus():
+		var cursor := center + _keyboard_offset_km * radius / display_range_km
+		draw_arc(cursor, 11.0, 0.0, TAU, 24, HOT, 1.0, true)
+
+func _draw_recovery_marker(center: Vector2, radius: float, world_point: Vector2, label: String, window_km: float, tint: Color, family: String, heading: float = 0.0, texture: Texture2D = null) -> void:
+	var offset := world_point - own_position_km
+	var point := center + (offset * radius / display_range_km).limit_length(radius - 24.0)
+	if offset.length() + window_km <= display_range_km:
+		draw_arc(point, window_km * radius / display_range_km, 0.0, TAU, 48, Color(tint, 0.3), 1.0, true)
+	_draw_unit_symbol(point, family, tint, heading, texture)
+	var caption := "%s %.1f km" % [label, offset.length()] if offset.length() > display_range_km else label
+	var text_offset := Vector2(14, -14) if point.x > center.x else Vector2(-24, -14)
+	if offset.length() > display_range_km:
+		text_offset = Vector2(-82, -14) if point.x > center.x else Vector2(14, -14)
+	draw_string(ThemeDB.fallback_font, point + text_offset, caption, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, tint)
 
 func contact_energy() -> float:
 	return Decay.energy(WorldClock.elapsed_seconds - MissionController.last_contact_seconds, ECHO_LIFETIME_SECONDS)
@@ -261,7 +344,7 @@ func _draw_readout(center: Vector2, radius: float) -> void:
 	draw_string(font, center + Vector2(radius + 7, 5), "E", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, GRID)
 	draw_string(font, center + Vector2(-7, radius + 18), "S", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, GRID)
 	draw_string(font, center + Vector2(-radius - 16, 5), "W", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, GRID)
-	draw_string(font, center + Vector2(-radius + 2, radius + 28), "PPI / SEARCH", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#73a984"))
+	draw_string(font, center + Vector2(-radius + 2, radius + 28), "NAV / AIRCRAFT" if flight_navigation else "PPI / SEARCH", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#73a984"))
 	draw_string(font, center + Vector2(radius - 80, radius + 28), "%.1f KM" % display_range_km, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#73a984"))
 
 func _draw_gun_arc(center: Vector2, radius: float) -> void:

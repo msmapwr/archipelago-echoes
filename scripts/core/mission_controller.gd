@@ -50,6 +50,9 @@ var sorties_launched: int = 0
 var sortie_ship_standby: bool = false
 var aircraft_bombs: int = 1
 var aircraft_destination: String = "manual"
+var aircraft_waypoint_km: Vector2 = Vector2.ZERO
+var _navigation_arrived: bool = false
+var _fuel_warning_level: int = 0
 var airfield_position_km: Vector2 = Vector2.ZERO
 
 var last_message: String = "系统待命"
@@ -100,6 +103,9 @@ func _initialize_scenario() -> void:
 	sortie_ship_standby = false
 	aircraft_bombs = 1
 	aircraft_destination = "manual"
+	aircraft_waypoint_km = Vector2.ZERO
+	_navigation_arrived = false
+	_fuel_warning_level = 0
 	if WorldState.map != null:
 		airfield_position_km = WorldState.map.islands[1]["center"]
 	_last_clock_seconds = WorldClock.elapsed_seconds
@@ -326,6 +332,8 @@ func set_aircraft_heading(heading_degrees: float) -> bool:
 		return false
 	aircraft_heading_degrees = fposmod(heading_degrees, 360.0)
 	aircraft_destination = "manual"
+	_navigation_arrived = false
+	EventBus.record("aircraft_navigation_command", {"destination": "manual", "heading_degrees": aircraft_heading_degrees})
 	state_changed.emit()
 	return _accept("飞机转向 %03d°" % roundi(aircraft_heading_degrees))
 
@@ -336,10 +344,49 @@ func set_aircraft_destination(destination: String) -> bool:
 		return false
 	if destination == "ship" and not GameManager.ship_afloat:
 		return _reject("母舰已沉没，请转往友方机场")
+	if destination == "contact" and not enemy_alive:
+		return _reject("A1 已失去活动迹象，请选择回收点或航点")
 	aircraft_destination = destination
+	_navigation_arrived = false
+	EventBus.record("aircraft_navigation_command", {"destination": destination})
 	state_changed.emit()
 	var target_names := {"contact": "A1", "ship": "母舰", "airfield": "友方机场"}
 	return _accept("飞机导航目标：%s" % target_names[destination])
+
+func set_aircraft_waypoint(position_km: Vector2) -> bool:
+	if not aircraft_airborne or GameManager.mode not in ["cockpit", "returning"]:
+		return _reject("航点只能在空中下达")
+	if not position_km.is_finite() or WorldState.map == null or not Rect2(Vector2.ZERO, WorldState.map.MAP_SIZE_KM).has_point(position_km):
+		return _reject("航点不在有效海域内")
+	aircraft_waypoint_km = position_km
+	aircraft_destination = "waypoint"
+	_navigation_arrived = false
+	EventBus.record("aircraft_navigation_command", {"destination": "waypoint", "position_km": position_km})
+	state_changed.emit()
+	return _accept("航点已下达：E %.1f / S %.1f km" % [position_km.x, position_km.y])
+
+func navigation_solution(destination: String = "") -> Dictionary:
+	var chosen := aircraft_destination if destination.is_empty() else destination
+	var target := aircraft_position_km
+	var radius := 0.0
+	var available := true
+	match chosen:
+		"contact":
+			target = WorldState.contact_position_km
+			available = enemy_alive
+		"ship":
+			target = WorldState.ship_position_km
+			radius = 2.0
+			available = GameManager.ship_afloat
+		"airfield":
+			target = airfield_position_km
+			radius = 3.0
+		"waypoint": target = aircraft_waypoint_km
+		_: available = false
+	var distance := aircraft_position_km.distance_to(target)
+	var speed := aircraft_speed_knots * KNOT_TO_KM_PER_SECOND
+	var eta := maxf(0.0, distance - radius) / speed if available and speed > 0.0 else INF
+	return {"destination": chosen, "position_km": target, "available": available, "distance_km": distance, "eta_seconds": eta, "fuel_margin_seconds": aircraft_fuel_seconds - eta, "reachable": available and aircraft_fuel_seconds > eta, "in_window": available and distance <= radius, "ship_speed_ok": chosen != "ship" or WorldState.ship_speed_knots <= 12.0}
 
 func perform_recon() -> bool:
 	if not _action_allowed():
@@ -375,16 +422,23 @@ func aircraft_attack() -> bool:
 	state_changed.emit()
 	return _accept("对海攻击命中，A1 已失去战斗力")
 
-func begin_return() -> bool:
+func begin_return(destination: String = "") -> bool:
 	if not _action_allowed():
 		return false
 	if GameManager.mode != "cockpit" or not aircraft_airborne:
 		return _reject("当前无法进入返航流程")
 	var previous_destination := aircraft_destination
-	aircraft_destination = "ship" if GameManager.ship_afloat else "airfield"
+	var chosen := destination
+	if chosen.is_empty():
+		chosen = aircraft_destination if aircraft_destination in ["ship", "airfield"] else "ship" if GameManager.ship_afloat else "airfield"
+	if chosen not in ["ship", "airfield"] or (chosen == "ship" and not GameManager.ship_afloat):
+		return _reject("回收地点不可用，请选择友方机场")
+	aircraft_destination = chosen
+	_navigation_arrived = false
 	if not GameManager.change_mode("returning"):
 		aircraft_destination = previous_destination
 		return false
+	EventBus.record("aircraft_navigation_command", {"destination": chosen})
 	state_changed.emit()
 	return _accept("返航中；到达回收点后执行降落")
 
@@ -398,36 +452,41 @@ func cancel_return() -> bool:
 	if not GameManager.change_mode("cockpit"):
 		aircraft_destination = previous_destination
 		return false
+	_navigation_arrived = false
 	EventBus.record("return_cancelled", {})
 	state_changed.emit()
 	return _accept("返航已取消；保持当前航向，燃油不会恢复。可重新导航 A1 继续侦察")
 
-func land_aircraft() -> bool:
+func land_aircraft(site: String = "") -> bool:
 	if not _action_allowed():
 		return false
 	if GameManager.mode != "returning" or not aircraft_airborne:
 		return _reject("飞机尚未进入返航状态")
 	var ship_distance := aircraft_position_km.distance_to(WorldState.ship_position_km)
 	var airfield_distance := aircraft_position_km.distance_to(airfield_position_km)
-	var site := ""
-	if GameManager.ship_afloat and ship_distance <= 2.0:
+	var chosen := site
+	if chosen.is_empty():
+		if aircraft_destination in ["ship", "airfield"]:
+			chosen = "ship" if aircraft_destination == "ship" else "friendly_airfield"
+		else:
+			chosen = "ship" if GameManager.ship_afloat and ship_distance <= 2.0 else "friendly_airfield"
+	if chosen == "ship" and GameManager.ship_afloat and ship_distance <= 2.0:
 		if WorldState.ship_speed_knots > 12.0:
 			return _reject("母舰航速超过 12 kn，无法回收")
-		site = "ship"
-	elif airfield_distance <= 3.0:
-		site = "friendly_airfield"
+	elif chosen == "friendly_airfield" and airfield_distance <= 3.0:
+		pass
 	else:
 		return _reject("尚未到达回收点：母舰 %.1f km / 机场 %.1f km" % [ship_distance, airfield_distance])
 	var previous_destination := aircraft_destination
 	aircraft_airborne = false
 	aircraft_destination = "manual"
-	if not GameManager.recover_player(site):
+	if not GameManager.recover_player(chosen):
 		aircraft_airborne = true
 		aircraft_destination = previous_destination
 		return _reject("回收条件不满足")
-	EventBus.record("aircraft_landed", {"site": site})
+	EventBus.record("aircraft_landed", {"site": chosen})
 	state_changed.emit()
-	return _accept("飞机已安全回收：%s" % ("母舰" if site == "ship" else "友方机场"))
+	return _accept("飞机已安全回收：%s" % ("母舰" if chosen == "ship" else "友方机场"))
 
 func complete_mission() -> bool:
 	if not _action_allowed():
@@ -531,25 +590,32 @@ func _advance_aircraft(delta: float) -> void:
 		GameManager.report_player_death("fuel_exhausted")
 		_feedback("燃油耗尽，飞机失事；战役结束")
 		return
-	if aircraft_destination != "manual":
-		var target := WorldState.contact_position_km
-		if aircraft_destination == "ship":
-			target = WorldState.ship_position_km
-		elif aircraft_destination == "airfield":
-			target = airfield_position_km
+	# Lost recovery platforms cannot leave the navigator following a sunk ship.
+	if aircraft_destination == "ship" and not GameManager.ship_afloat:
+		aircraft_destination = "airfield"
+		_navigation_arrived = false
+		EventBus.record("aircraft_navigation_diverted", {"reason": "ship_sunk", "destination": "airfield"})
+		_feedback("母舰已沉没，导航已转向友方机场；请检查燃油")
+	var solution := navigation_solution()
+	if solution.available:
+		var target: Vector2 = solution.position_km
 		var relative := target - aircraft_position_km
 		if relative.length() > 0.001:
 			aircraft_heading_degrees = fposmod(rad_to_deg(atan2(relative.x, -relative.y)), 360.0)
 	var direction := Vector2(sin(deg_to_rad(aircraft_heading_degrees)), -cos(deg_to_rad(aircraft_heading_degrees)))
 	var distance := aircraft_speed_knots * KNOT_TO_KM_PER_SECOND * delta
-	if aircraft_destination != "manual":
-		var target := WorldState.contact_position_km
-		if aircraft_destination == "ship":
-			target = WorldState.ship_position_km
-		elif aircraft_destination == "airfield":
-			target = airfield_position_km
-		distance = minf(distance, aircraft_position_km.distance_to(target))
+	if solution.available:
+		distance = minf(distance, float(solution.distance_km))
 	aircraft_position_km += direction * distance
+	if solution.available and aircraft_position_km.distance_to(solution.position_km) <= 0.01 and not _navigation_arrived:
+		_navigation_arrived = true
+		EventBus.record("aircraft_navigation_arrived", {"destination": aircraft_destination})
+		_feedback("已到达导航点；自动保持点位仍消耗燃油，回收须点击降落")
+	var warning_level := 2 if aircraft_fuel_seconds <= 30.0 else 1 if aircraft_fuel_seconds <= 120.0 else 0
+	if warning_level > _fuel_warning_level:
+		_fuel_warning_level = warning_level
+		EventBus.record("aircraft_fuel_warning", {"seconds_remaining": aircraft_fuel_seconds, "level": warning_level})
+		_feedback("燃油紧急：不足 30 秒，立即寻找回收窗口" if warning_level == 2 else "燃油预警：不足两分钟，请返航回收")
 
 func _damage_enemy(amount: float, source: String) -> void:
 	enemy_health = maxf(0.0, enemy_health - amount)

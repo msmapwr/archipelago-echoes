@@ -49,10 +49,14 @@ static func project(state: Dictionary) -> Dictionary:
 		result.title = "返航与回收"
 		var ship_distance: float = state.get("ship_distance", INF)
 		var field_distance: float = state.get("airfield_distance", INF)
-		if state.get("ship_afloat", true) and ship_distance <= 2.0:
+		var airport_selected: bool = state.get("destination", "manual") == "airfield"
+		if airport_selected:
+			result.can_land = field_distance <= 3.0
+			result.landing_reason = "已进入机场 3 km 窗口；点击降落机场。" if result.can_land else "已选择友方机场；继续导航，距机场 %.1f km，回收窗口 3 km。" % field_distance
+		elif state.get("ship_afloat", true) and ship_distance <= 2.0:
 			result.can_land = state.get("ship_speed", 0.0) <= 12.0
 			result.landing_reason = "已进入母舰 2 km 回收窗口；点击降落回舰。" if result.can_land else "母舰航速超过 12 kn；请求母舰停车后降落，或转往友方机场。"
-		elif field_distance <= 3.0:
+		elif state.get("destination", "manual") != "ship" and field_distance <= 3.0:
 			result.can_land = true
 			result.landing_reason = "已进入友方机场 3 km 回收窗口；点击降落。"
 		else:
@@ -71,7 +75,7 @@ static func project(state: Dictionary) -> Dictionary:
 		if not state.get("contact_visible", false):
 			result.next = "当前回波中断；开启雷达并调整航路复测，或出击侦察。未知目标禁止开火。"
 	if state.get("airborne", false):
-		var use_ship: bool = state.get("ship_afloat", true) and state.get("ship_speed", 0.0) <= 12.0
+		var use_ship: bool = state.get("destination", "manual") != "airfield" and state.get("ship_afloat", true) and (state.get("destination", "manual") == "ship" or state.get("ship_speed", 0.0) <= 12.0)
 		var distance: float = state.get("ship_distance", 0.0) if use_ship else state.get("airfield_distance", 0.0)
 		var radius := 2.0 if use_ship else 3.0
 		var flight_speed: float = state.get("flight_speed", 0.0) * 1.852 / 3600.0
@@ -82,7 +86,7 @@ static func project(state: Dictionary) -> Dictionary:
 			result.warning = "燃油警报：余 %.1f 分，直线回收估算 %.1f 分；%s" % [fuel / 60.0, result.return_seconds / 60.0, advice]
 		elif not state.get("ship_afloat", true):
 			result.warning = "母舰已沉没；立即导航友方机场并安全降落。"
-		elif state.get("ship_speed", 0.0) > 12.0:
+		elif state.get("destination", "manual") != "airfield" and state.get("ship_speed", 0.0) > 12.0:
 			result.warning = "母舰航速超过回收限制；可请求停车或转往机场。"
 	elif state.get("ship_health", 100.0) <= 40.0:
 		result.warning = "母舰严重受损；低速投入损管或调整航路脱离接触。"

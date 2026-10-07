@@ -96,6 +96,7 @@ func _run() -> void:
 	_check(mission.request_ship_standby() and world.ship_speed_knots == 0, "airborne radio request stops carrier for recovery")
 	_check(not mission.request_ship_standby(), "repeated standby provides feedback without another order")
 	mission.begin_return()
+	mission.set_aircraft_destination("airfield")
 	mission.aircraft_position_km = mission.airfield_position_km
 	mission.land_aircraft()
 	_check(transition_snapshots[-1].recovered and transition_snapshots[-1].site == "friendly_airfield" and not transition_snapshots[-1].airborne, "airfield recovery observer sees consistent result")

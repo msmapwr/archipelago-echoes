@@ -19,7 +19,7 @@ func _capture() -> void:
 			trainer.perform("scan")
 			trainer.perform("select")
 		await create_timer(0.7, true).timeout
-	elif capture_mode in ["harbor", "game", "damage", "archive", "guide-return", "sortie"]:
+	elif capture_mode in ["harbor", "game", "damage", "archive", "guide-return", "sortie", "flight-nav"]:
 		shell.get_node("StartButton").emit_signal("pressed")
 		for step in range(7):
 			if shell.get_node("GameCRTSlot/Preparation").stage == "tutorial":
@@ -57,6 +57,14 @@ func _capture() -> void:
 		if capture_mode == "sortie":
 			root.get_node("MissionController").prepare_sortie()
 			root.get_node("MissionController").set_sortie_ship_standby(true)
+		if capture_mode == "flight-nav":
+			var mission: Node = root.get_node("MissionController")
+			mission.prepare_sortie()
+			mission.set_sortie_ship_standby(true)
+			mission.launch_sortie()
+			root.get_node("WorldClock").advance(5)
+			mission.set_aircraft_waypoint(mission.aircraft_position_km + Vector2(8, -8))
+			root.get_node("WorldClock").advance(70)
 	else:
 		await create_timer(2.3, true).timeout
 	await process_frame

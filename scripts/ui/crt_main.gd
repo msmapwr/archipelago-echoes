@@ -49,6 +49,7 @@ func _ready() -> void:
 	_connect_buttons()
 	radar.contact_selected.connect(_on_contact_selected)
 	radar.contact_deselected.connect(_on_contact_deselected)
+	radar.waypoint_requested.connect(func(position_km: Vector2) -> void: MissionController.set_aircraft_waypoint(position_km))
 	MissionController.state_changed.connect(_refresh_ui)
 	MissionController.feedback_changed.connect(_on_feedback_changed)
 	WorldClock.time_advanced.connect(_on_world_time_advanced)
@@ -120,7 +121,7 @@ func _build_sortie_ui() -> void:
 	flight_requests.add_child(cancel_return_button)
 
 func guidance_state() -> Dictionary:
-	return {"mode": GameManager.mode, "identified": GameManager.target_identified, "recovered": GameManager.player_recovered, "settled": GameManager.task_settled, "scans": MissionController.contact_scan_count, "contact_visible": MissionController.contact_visible, "launched": MissionController.sorties_launched > 0, "airborne": MissionController.aircraft_airborne, "switch_seconds": MissionController.switch_seconds_remaining, "ship_afloat": GameManager.ship_afloat, "ship_speed": WorldState.ship_speed_knots, "ship_health": MissionController.ship_health, "tracking": MissionController.enemy_tracking_ship, "contact_distance": MissionController.aircraft_position_km.distance_to(WorldState.contact_position_km), "ship_distance": MissionController.aircraft_position_km.distance_to(WorldState.ship_position_km), "airfield_distance": MissionController.aircraft_position_km.distance_to(MissionController.airfield_position_km), "flight_speed": MissionController.aircraft_speed_knots, "fuel_seconds": MissionController.aircraft_fuel_seconds, "death_reason": GameManager.last_death_reason}
+	return {"mode": GameManager.mode, "identified": GameManager.target_identified, "recovered": GameManager.player_recovered, "settled": GameManager.task_settled, "scans": MissionController.contact_scan_count, "contact_visible": MissionController.contact_visible, "launched": MissionController.sorties_launched > 0, "airborne": MissionController.aircraft_airborne, "switch_seconds": MissionController.switch_seconds_remaining, "ship_afloat": GameManager.ship_afloat, "ship_speed": WorldState.ship_speed_knots, "ship_health": MissionController.ship_health, "tracking": MissionController.enemy_tracking_ship, "contact_distance": MissionController.aircraft_position_km.distance_to(WorldState.contact_position_km), "ship_distance": MissionController.aircraft_position_km.distance_to(WorldState.ship_position_km), "airfield_distance": MissionController.aircraft_position_km.distance_to(MissionController.airfield_position_km), "flight_speed": MissionController.aircraft_speed_knots, "fuel_seconds": MissionController.aircraft_fuel_seconds, "destination": MissionController.aircraft_destination, "death_reason": GameManager.last_death_reason}
 
 func _refresh_guidance() -> void:
 	guidance = Guidance.project(guidance_state())
@@ -379,7 +380,7 @@ func _refresh_ui() -> void:
 	_refresh_gun_status()
 	_refresh_sortie_configuration()
 	ship_controls.visible = mode == "bridge" or mode == "configuration" or mode == "switching"
-	contact_status.visible = mode not in ["configuration", "switching"]
+	contact_status.visible = mode == "bridge"
 	contact_details.visible = contact_status.visible
 	flight_controls.visible = mode == "cockpit" or mode == "returning"
 	debrief.visible = mode == "settlement" or mode == "campaign_failed"
@@ -403,6 +404,7 @@ func _refresh_ui() -> void:
 	for path in ["PhaseActions/Prepare", "PhaseActions/Launch", "PhaseActions/Cancel", "PhaseActions/Return", "PhaseActions/Land", "FlightControls/FlightActions/Recon", "FlightControls/FlightActions/Attack"]:
 		_button(path).disabled = get_tree().paused
 	_button("PhaseActions/Settle").disabled = get_tree().paused or not GameManager.target_identified
+	_button("PhaseActions/Land").disabled = get_tree().paused or not guidance.can_land
 	cancel_return_button.disabled = get_tree().paused
 	cancel_return_button.visible = mode == "returning"
 	standby_button.disabled = not GameManager.ship_afloat or WorldState.ship_speed_knots == 0.0
@@ -466,10 +468,18 @@ func _refresh_flight() -> void:
 	var contact_distance := MissionController.aircraft_position_km.distance_to(WorldState.contact_position_km)
 	var ship_distance := MissionController.aircraft_position_km.distance_to(WorldState.ship_position_km)
 	var airfield_distance := MissionController.aircraft_position_km.distance_to(MissionController.airfield_position_km)
-	var destination_names := {"manual": "手动", "contact": "A1", "ship": "母舰", "airfield": "机场"}
+	var destination_names := {"manual": "手动", "contact": "A1", "ship": "母舰", "airfield": "机场", "waypoint": "航点"}
 	flight_details.text = "位置 E %05.1f / S %05.1f km   航向 %03d°\n燃油 %.0f 分   对海弹 %d   导航 %s\nA1 %.1f km  母舰 %.1f km  机场 %.1f km" % [MissionController.aircraft_position_km.x, MissionController.aircraft_position_km.y, roundi(MissionController.aircraft_heading_degrees), MissionController.aircraft_fuel_seconds / 60.0, MissionController.aircraft_bombs, destination_names.get(MissionController.aircraft_destination, "未知"), contact_distance, ship_distance, airfield_distance]
 	_button("FlightControls/FlightNavControls/NavShip").disabled = not GameManager.ship_afloat
+	_button("FlightControls/FlightNavControls/NavContact").disabled = not MissionController.enemy_alive
+	var solution := MissionController.navigation_solution()
+	if solution.available:
+		flight_details.text += "\n%s %.1f 分 · 余油 %+.1f 分" % ["入窗估算" if MissionController.aircraft_destination in ["ship", "airfield"] else "抵达估算", float(solution.eta_seconds) / 60.0, float(solution.fuel_margin_seconds) / 60.0]
+		flight_details.add_theme_color_override("font_color", Color("#e8b968") if not solution.reachable else Color("#a2c0a9"))
+	else:
+		flight_details.add_theme_color_override("font_color", Color("#a2c0a9"))
 	flight_details.text += "\n母舰 %.0f%% · 损管 %s" % [MissionController.ship_health, "剩余 %.0f 秒" % ceilf(MissionController.repair_seconds_remaining) if MissionController.repair_seconds_remaining > 0.0 else "待命 %d 组" % MissionController.repair_teams]
+	flight_details.text += "\n右键设航点；雷达聚焦后方向键 / Enter"
 
 func _refresh_debrief() -> void:
 	var outcome := "任务完成" if GameManager.mode == "settlement" else "战役失败"
@@ -479,11 +489,15 @@ func _refresh_debrief() -> void:
 func _refresh_radar() -> void:
 	if WorldState.map == null:
 		return
-	radar.set_land_areas(WorldState.map.islands, WorldState.ship_position_km)
-	radar.set_sweep_enabled(MissionController.radar_emitting)
+	var flying: bool = MissionController.aircraft_airborne and GameManager.mode in ["cockpit", "returning"]
+	var origin: Vector2 = MissionController.aircraft_position_km if flying else WorldState.ship_position_km
+	radar.set_land_areas(WorldState.map.islands, origin)
+	radar.set_ship_heading(MissionController.aircraft_heading_degrees if flying else WorldState.ship_heading_degrees)
+	radar.set_sweep_enabled(MissionController.radar_emitting and not flying)
 	radar.set_integrity(MissionController.ship_health)
 	radar.set_aircraft(MissionController.aircraft_position_km, MissionController.aircraft_airborne)
-	var relative := MissionController.last_contact_position_km - WorldState.ship_position_km
+	radar.set_flight_navigation(flying, WorldState.ship_position_km, GameManager.ship_afloat, MissionController.airfield_position_km, MissionController.navigation_solution())
+	var relative := MissionController.last_contact_position_km - origin
 	var bearing := fposmod(rad_to_deg(atan2(relative.x, -relative.y)), 360.0)
 	radar.set_contact(MissionController.CONTACT_ID, bearing, relative.length(), MissionController.contact_visible and MissionController.enemy_alive, GameManager.target_identified)
 
@@ -516,6 +530,10 @@ func _event_line(event: Dictionary) -> String:
 		"sortie_configured": return "出击托管：停车待命" if details_data.get("ship_standby", false) else "出击托管：保持航行"
 		"ship_standby_requested": return "母舰收到空中待命请求"
 		"return_cancelled": return "返航取消，恢复飞行控制"
+		"aircraft_navigation_command": return "飞机导航 / " + {"manual": "手动航向", "contact": "A1", "ship": "母舰", "airfield": "机场", "waypoint": "指定航点"}.get(details_data.get("destination", ""), "未知")
+		"aircraft_navigation_arrived": return "飞机已抵达导航点，仍消耗燃油"
+		"aircraft_navigation_diverted": return "母舰沉没，导航改向机场"
+		"aircraft_fuel_warning": return "飞机燃油预警 / 余 %.0f 秒" % details_data.get("seconds_remaining", 0.0)
 		"aircraft_landed": return "飞机安全回收"
 		"enemy_destroyed": return "A1 失去战斗力"
 		"player_death": return "指挥官失联"
