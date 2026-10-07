@@ -46,6 +46,7 @@ var aircraft_heading_degrees: float = 42.0
 var aircraft_speed_knots: float = 135.0
 var aircraft_fuel_seconds: float = 0.0
 var aircraft_airborne: bool = false
+var sorties_launched: int = 0
 var aircraft_bombs: int = 1
 var aircraft_destination: String = "manual"
 var airfield_position_km: Vector2 = Vector2.ZERO
@@ -59,8 +60,8 @@ func _ready() -> void:
 
 func restart_scenario() -> void:
 	EventBus.history.clear()
-	GameManager.reset_for_new_scenario()
 	WorldClock.reset()
+	GameManager.reset_for_new_scenario()
 	WorldClock.set_time_scale(1.0)
 	WorldState.load_first_scenario(WorldState.scenario_seed)
 	_initialize_scenario()
@@ -94,6 +95,7 @@ func _initialize_scenario() -> void:
 		aircraft_speed_knots = aircraft.cruise_speed_knots
 		aircraft_fuel_seconds = aircraft.fuel_minutes * 60.0
 	aircraft_airborne = false
+	sorties_launched = 0
 	aircraft_bombs = 1
 	aircraft_destination = "manual"
 	if WorldState.map != null:
@@ -432,6 +434,7 @@ func _start_flight() -> void:
 		return
 	aircraft_position_km = WorldState.ship_position_km
 	aircraft_airborne = true
+	sorties_launched += 1
 	aircraft_destination = "contact"
 	EventBus.record("aircraft_launched", {"position_km": aircraft_position_km})
 	_feedback("隼影侦察机升空；舰艇由最后航行命令托管")

@@ -20,6 +20,7 @@ var player_recovered: bool = false
 var recovery_site: String = ""
 var current_task_id: String = "task.first_recon"
 var task_settled: bool = false
+var last_death_reason: String = ""
 
 func reset_for_new_scenario() -> void:
 	mode = "bridge"
@@ -31,6 +32,7 @@ func reset_for_new_scenario() -> void:
 	recovery_site = ""
 	current_task_id = "task.first_recon"
 	task_settled = false
+	last_death_reason = ""
 	get_tree().paused = false
 	EventBus.record("scenario_started", {"task_id": current_task_id})
 
@@ -64,6 +66,7 @@ func _transition(next_mode: String) -> bool:
 
 func report_player_death(reason: String) -> void:
 	player_alive = false
+	last_death_reason = reason
 	EventBus.record("player_death", {"reason": reason})
 	change_mode("campaign_failed")
 

@@ -2,6 +2,8 @@ extends Control
 
 signal menu_requested
 
+const Guidance = preload("res://scripts/core/mission_guidance.gd")
+
 @onready var terminal: Control = $ScreenContainer/ScreenViewport/Terminal
 @onready var radar: Control = terminal.get_node("Content/RadarFrame/Radar")
 @onready var details: VBoxContainer = terminal.get_node("Content/DetailsFrame/DetailsScroll/Details")
@@ -28,10 +30,16 @@ signal menu_requested
 var selected_contact_id: String = ""
 var _next_auto_scan_seconds: float = 30.0
 var _displayed_second: int = -1
+var objective_title: Label
+var objective_hint: Label
+var archive: Control
+var _archive_paused_world: bool = false
+var guidance: Dictionary = {}
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_apply_theme()
+	_build_guidance_ui()
 	_connect_buttons()
 	radar.contact_selected.connect(_on_contact_selected)
 	radar.contact_deselected.connect(_on_contact_deselected)
@@ -50,6 +58,107 @@ func _ready() -> void:
 	MissionController.scan()
 	_refresh_ui()
 	_on_world_time_advanced(WorldClock.elapsed_seconds)
+	_on_event_recorded({})
+
+func _build_guidance_ui() -> void:
+	var strip := VBoxContainer.new()
+	strip.name = "ObjectiveStrip"
+	strip.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	strip.offset_left = 18
+	strip.offset_top = 55
+	strip.offset_right = -18
+	strip.offset_bottom = 116
+	strip.add_theme_constant_override("separation", 3)
+	terminal.add_child(strip)
+	objective_title = Label.new()
+	objective_title.add_theme_font_size_override("font_size", 18)
+	objective_title.add_theme_color_override("font_color", Color("#d1e7cc"))
+	strip.add_child(objective_title)
+	objective_hint = Label.new()
+	objective_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	objective_hint.add_theme_font_size_override("font_size", 15)
+	objective_hint.add_theme_color_override("font_color", Color("#a2c0a9"))
+	strip.add_child(objective_hint)
+	archive = Control.new()
+	archive.name = "CommandArchive"
+	archive.set_script(preload("res://scripts/ui/command_archive.gd"))
+	terminal.add_child(archive)
+	archive.close_requested.connect(close_archive)
+	terminal.get_node("Footer/CommandArchive").pressed.connect(toggle_archive)
+
+func guidance_state() -> Dictionary:
+	return {"mode": GameManager.mode, "identified": GameManager.target_identified, "recovered": GameManager.player_recovered, "settled": GameManager.task_settled, "scans": MissionController.contact_scan_count, "contact_visible": MissionController.contact_visible, "launched": MissionController.sorties_launched > 0, "airborne": MissionController.aircraft_airborne, "switch_seconds": MissionController.switch_seconds_remaining, "ship_afloat": GameManager.ship_afloat, "ship_speed": WorldState.ship_speed_knots, "ship_health": MissionController.ship_health, "tracking": MissionController.enemy_tracking_ship, "contact_distance": MissionController.aircraft_position_km.distance_to(WorldState.contact_position_km), "ship_distance": MissionController.aircraft_position_km.distance_to(WorldState.ship_position_km), "airfield_distance": MissionController.aircraft_position_km.distance_to(MissionController.airfield_position_km), "flight_speed": MissionController.aircraft_speed_knots, "fuel_seconds": MissionController.aircraft_fuel_seconds, "death_reason": GameManager.last_death_reason}
+
+func _refresh_guidance() -> void:
+	guidance = Guidance.project(guidance_state())
+	objective_title.text = "当前目标 / " + guidance.title
+	objective_hint.text = guidance.next
+	if not guidance.warning.is_empty():
+		objective_hint.text = guidance.warning + "  " + guidance.next
+	objective_hint.add_theme_color_override("font_color", Color("#e8b968") if not guidance.warning.is_empty() else Color("#a2c0a9"))
+
+func toggle_archive() -> void:
+	if archive.visible:
+		close_archive()
+		return
+	var paused_before := get_tree().paused
+	_archive_paused_world = not paused_before
+	if _archive_paused_world:
+		GameManager.set_paused(true)
+	_refresh_guidance()
+	archive.present(_archive_briefing(), _archive_progress(), _archive_history(), paused_before, GameManager.mode in ["settlement", "campaign_failed"])
+	_refresh_ui()
+
+func close_archive(resume_owned_pause: bool = true) -> void:
+	archive.hide()
+	if resume_owned_pause and _archive_paused_world and GameManager.mode not in ["settlement", "campaign_failed"]:
+		GameManager.set_paused(false)
+	_archive_paused_world = false
+	terminal.get_node("Footer/CommandArchive").grab_focus()
+	_refresh_ui()
+
+func _archive_briefing() -> String:
+	var task: TaskDefinition = DataManager.definitions.get(GameManager.current_task_id) as TaskDefinition
+	if task == null:
+		return "命令数据不可用。关闭档案后可返回主菜单重新开始。"
+	var ship: GameDefinition = DataManager.definitions.get(task.ship_id)
+	var aircraft: GameDefinition = DataManager.definitions.get(task.aircraft_id)
+	return "%s\n%s\n\n%s\n\n目标 / %s\n舰船 / %s\n飞机 / %s\n\n%s" % [task.command_source, task.display_name, task.briefing, task.objective, ship.display_name if ship != null else "资料缺失", aircraft.display_name if aircraft != null else "资料缺失", task.operational_notes]
+
+func _archive_progress() -> String:
+	var lines: PackedStringArray = ["当前阶段 / " + guidance.title, guidance.next, ""]
+	var names := ["取得雷达观测", "确认指定接触", "飞机实际升空", "指挥官安全回收", "提交任务报告"]
+	for index in range(names.size()):
+		lines.append("%s  %s" % ["[已完成]" if guidance.milestones[index] else "[待完成]", names[index]])
+	lines.append("\n舰体 %.0f%% · 甲板炮余弹 %d · 出击 %d 次\n回收地点 / %s\n模拟耗时 / %s · 海域种子 / %d" % [MissionController.ship_health, MissionController.ship_ammo, MissionController.sorties_launched, {"ship": "母舰", "friendly_airfield": "友方机场", "rescue": "救援"}.get(GameManager.recovery_site, "尚未回收"), WorldClock.formatted_time(), WorldState.scenario_seed])
+	if not guidance.warning.is_empty():
+		lines.append("\n" + guidance.warning)
+	if MissionController.aircraft_airborne:
+		lines.append("直线回收估算 %.1f 分，燃油剩余 %.1f 分；估算不包含移动回收点与后续操纵。" % [guidance.return_seconds / 60.0, MissionController.aircraft_fuel_seconds / 60.0])
+	return "\n".join(lines)
+
+func _archive_history() -> String:
+	var lines: PackedStringArray = []
+	for event in EventBus.history:
+		if event.get("kind", "") == "contact_updated":
+			continue
+		var seconds := int(event.get("simulation_seconds", 0.0))
+		lines.append("T+%02d:%02d  %s" % [floori(float(seconds) / 60.0), seconds % 60, _event_line(event)])
+		if lines.size() > 40:
+			lines.remove_at(0)
+	return "行动记录 / 最近 40 条（重复复测省略）\n\n" + ("尚无记录。" if lines.is_empty() else "\n".join(lines))
+
+func _input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F1:
+		toggle_archive()
+		get_viewport().set_input_as_handled()
+	elif archive != null and archive.visible and (event.is_action_pressed("ui_focus_next") or event.is_action_pressed("ui_focus_prev") or event.is_action_pressed("ui_up") or event.is_action_pressed("ui_down") or event.is_action_pressed("ui_left") or event.is_action_pressed("ui_right")):
+		archive.cycle_focus(event.is_action_pressed("ui_focus_prev") or event.is_action_pressed("ui_up") or event.is_action_pressed("ui_left"))
+		get_viewport().set_input_as_handled()
+	elif archive != null and archive.visible and (event.is_action_pressed("ui_cancel") or event.is_action_pressed("pause_simulation")):
+		if event.is_action_pressed("ui_cancel"):
+			close_archive()
+		get_viewport().set_input_as_handled()
 
 func _connect_buttons() -> void:
 	_button("RadarActions/NextSweep").pressed.connect(_on_scan_pressed)
@@ -141,6 +250,8 @@ func _button_style(background: Color, border: Color) -> StyleBoxFlat:
 	return style
 
 func _unhandled_input(event: InputEvent) -> void:
+	if archive != null and archive.visible:
+		return
 	if event.is_action_pressed("ui_cancel"):
 		radar.clear_selection()
 		get_viewport().set_input_as_handled()
@@ -149,10 +260,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 func _toggle_pause() -> void:
+	if archive.visible or GameManager.mode in ["settlement", "campaign_failed"]:
+		return
 	GameManager.set_paused(not get_tree().paused)
 	_refresh_ui()
 
 func _toggle_time_scale() -> void:
+	if archive.visible or GameManager.mode in ["settlement", "campaign_failed"]:
+		return
 	WorldClock.set_time_scale(10.0 if WorldClock.time_scale == 1.0 else 1.0)
 	_refresh_ui()
 
@@ -172,6 +287,8 @@ func _on_scan_pressed() -> void:
 		_next_auto_scan_seconds = WorldClock.elapsed_seconds + 30.0
 
 func _on_restart_pressed() -> void:
+	if archive.visible:
+		close_archive(false)
 	selected_contact_id = ""
 	radar.clear_selection()
 	MissionController.restart_scenario()
@@ -213,6 +330,7 @@ func _refresh_ui() -> void:
 		"campaign_failed": "SIGNAL LOST / 战役失败",
 	}
 	mode_status.text = mode_labels.get(mode, mode)
+	_refresh_guidance()
 	mission_status.text = "任务 01  /  确认 A1 · 指挥官安全返航"
 	if mode == "settlement":
 		mission_status.text = "任务完成  /  情报确认 · 指挥官安全回收"
@@ -238,8 +356,9 @@ func _refresh_ui() -> void:
 	_button("PhaseActions/Return").visible = mode == "cockpit"
 	_button("PhaseActions/Land").visible = mode == "returning"
 	_button("PhaseActions/Settle").visible = (mode == "bridge" or mode == "recovered") and GameManager.player_recovered
-	_button("PhaseActions/Restart").visible = mode == "settlement" or mode == "campaign_failed"
-	_button("PhaseActions/MainMenu").visible = mode == "settlement" or mode == "campaign_failed"
+	var incomplete_recovery := mode == "recovered" and not GameManager.target_identified
+	_button("PhaseActions/Restart").visible = mode == "settlement" or mode == "campaign_failed" or incomplete_recovery
+	_button("PhaseActions/MainMenu").visible = mode == "settlement" or mode == "campaign_failed" or incomplete_recovery
 	_button("RadarActions/NextSweep").disabled = get_tree().paused
 	_button("RadarActions/ToggleEmission").disabled = get_tree().paused
 	_button("RadarActions/ToggleEmission").text = "雷达静默" if MissionController.radar_emitting else "开启雷达"
@@ -344,6 +463,9 @@ func _event_line(event: Dictionary) -> String:
 		"aircraft_landed": return "飞机安全回收"
 		"enemy_destroyed": return "A1 失去战斗力"
 		"player_death": return "指挥官失联"
+		"command_accepted": return "指令部命令已接收"
+		"scenario_generated": return "海域生成 · 种子 %d" % details_data.get("seed", 0)
+		"harbor_departure": return "驶过港口离港线，行动开始"
 		"task_settled": return "任务结算完成"
 		"mode_changed": return "指挥模式切换"
 		"simulation_pause_changed": return "模拟暂停" if details_data.get("paused", false) else "模拟继续"

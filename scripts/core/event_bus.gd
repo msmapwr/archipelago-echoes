@@ -14,6 +14,9 @@ var history: Array[Dictionary] = []
 
 func record(kind: String, details: Dictionary = {}) -> void:
 	var event: Dictionary = {"kind": kind, "details": details.duplicate(true), "time_msec": Time.get_ticks_msec()}
+	var clock := get_node_or_null("/root/WorldClock")
+	if clock != null:
+		event["simulation_seconds"] = clock.elapsed_seconds
 	history.append(event)
 	event_recorded.emit(event)
 	print("[EventBus] %s %s" % [kind, JSON.stringify(details)])

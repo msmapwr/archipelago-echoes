@@ -118,7 +118,7 @@ anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 offset_left = 18.0
-offset_top = 63.0
+offset_top = 125.0
 offset_right = -18.0
 offset_bottom = -53.0
 grow_horizontal = 2
@@ -126,14 +126,14 @@ grow_vertical = 2
 theme_override_constants/separation = 18
 
 [node name="RadarFrame" type="PanelContainer" parent="ScreenContainer/ScreenViewport/Terminal/Content"]
-custom_minimum_size = Vector2(544, 480)
+custom_minimum_size = Vector2(544, 440)
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
 theme_override_styles/panel = SubResource("StyleBoxFlat_radar")
 
 [node name="Radar" type="Control" parent="ScreenContainer/ScreenViewport/Terminal/Content/RadarFrame"]
-custom_minimum_size = Vector2(528, 480)
+custom_minimum_size = Vector2(528, 440)
 layout_mode = 2
 mouse_filter = 1
 script = ExtResource("2")
@@ -479,11 +479,15 @@ layout_mode = 2
 text = "T+00:00"
 theme_override_colors/font_color = Color(0.545, 0.902, 0.639, 1)
 
+[node name="CommandArchive" type="Button" parent="ScreenContainer/ScreenViewport/Terminal/Footer"]
+layout_mode = 2
+text = "命令档案 / F1"
+
 [node name="Help" type="Label" parent="ScreenContainer/ScreenViewport/Terminal/Footer"]
 layout_mode = 2
 size_flags_horizontal = 3
 horizontal_alignment = 2
-text = "TAB 巡航控件  /  ESC 清除目标"
+text = "TAB 控件 / ESC 清除目标"
 theme_override_font_sizes/font_size = 14
 theme_override_colors/font_color = Color(0.63, 0.77, 0.66, 1)
 

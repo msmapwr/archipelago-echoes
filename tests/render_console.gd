@@ -19,7 +19,7 @@ func _capture() -> void:
 			trainer.perform("scan")
 			trainer.perform("select")
 		await create_timer(0.7, true).timeout
-	elif capture_mode == "harbor" or capture_mode == "game" or capture_mode == "damage":
+	elif capture_mode in ["harbor", "game", "damage", "archive", "guide-return"]:
 		shell.get_node("StartButton").emit_signal("pressed")
 		for step in range(7):
 			if shell.get_node("GameCRTSlot/Preparation").stage == "tutorial":
@@ -44,6 +44,16 @@ func _capture() -> void:
 			world.set_ship_command(42.0, 0.0)
 			clock.advance(10.0)
 			mission.start_damage_control()
+		if capture_mode == "guide-return":
+			var mission: Node = root.get_node("MissionController")
+			mission.prepare_sortie()
+			mission.launch_sortie()
+			root.get_node("WorldClock").advance(5)
+			mission.begin_return()
+			mission.aircraft_fuel_seconds = 110
+			shell.get_node("GameCRTSlot").get_child(0)._refresh_ui()
+		if capture_mode == "archive":
+			shell.get_node("GameCRTSlot").get_child(0).toggle_archive()
 	else:
 		await create_timer(2.3, true).timeout
 	await process_frame
