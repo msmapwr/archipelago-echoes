@@ -28,6 +28,13 @@ var last_contact_seconds: float = 0.0
 var last_contact_heading_degrees: float = 0.0
 var fire_control_aim_mode: String = "observed"
 var _motion = preload("res://scripts/core/fire_control_solution.gd").new()
+var fire_control_correction_km := Vector2.ZERO
+var projectiles: Array[Dictionary] = []
+var last_gun_impact: Dictionary = {}
+var _shot_sequence := 0
+var _last_tick_ship_position := Vector2.ZERO
+const GUN_HIT_RADIUS_KM := 0.05
+const GUN_NEAR_MISS_RADIUS_KM := 0.3
 
 var ship_health: float = 100.0
 var ship_ammo: int = 6
@@ -90,6 +97,11 @@ func _initialize_scenario() -> void:
 	last_contact_heading_degrees = 0.0
 	fire_control_aim_mode = "observed"
 	_motion.reset()
+	fire_control_correction_km = Vector2.ZERO
+	projectiles.clear()
+	last_gun_impact = {}
+	_shot_sequence = 0
+	_last_tick_ship_position = WorldState.ship_position_km
 	ship_health = 100.0
 	ship_ammo = 6
 	next_ship_fire_seconds = 0.0
@@ -225,6 +237,7 @@ func assign_fire_control_target(contact_id: String) -> bool:
 	_fire_control_sequence += 1
 	fire_control_target_id = contact_id
 	fire_control_order_id = "fire_control.%03d" % _fire_control_sequence
+	fire_control_correction_km = Vector2.ZERO
 	EventBus.record("fire_control_assigned", {"weapon_id": "weapon.deck_gun", "target_id": contact_id, "order_id": fire_control_order_id, "observation_seconds": last_contact_seconds, "queued": get_tree().paused})
 	EventBus.command_issued.emit(fire_control_order_id)
 	state_changed.emit()
@@ -245,23 +258,31 @@ func _reject_fire_control_clear(reason: String) -> bool:
 
 func _on_fire_control_event(event: Dictionary) -> void:
 	if event.get("kind", "") == "ship_sunk":
+		_cancel_gun_projectiles("母舰沉没")
 		_clear_fire_control("ship_sunk")
 		state_changed.emit()
 
-func _clear_fire_control(reason: String) -> void:
+func _clear_fire_control(reason: String, simulation_seconds: float = -1.0) -> void:
 	if fire_control_target_id.is_empty():
 		return
 	var target := fire_control_target_id
 	var order := fire_control_order_id
 	fire_control_target_id = ""
 	fire_control_order_id = ""
-	EventBus.record("fire_control_cleared", {"weapon_id": "weapon.deck_gun", "target_id": target, "order_id": order, "reason": reason})
+	fire_control_correction_km = Vector2.ZERO
+	EventBus.record("fire_control_cleared", {"weapon_id": "weapon.deck_gun", "target_id": target, "order_id": order, "reason": reason}, simulation_seconds)
 	EventBus.command_issued.emit(order + ".clear")
 
 func _on_fire_control_mode_changed(_previous: String, current: String) -> void:
 	if current in ["settlement", "campaign_failed"] or not GameManager.ship_afloat:
+		_cancel_gun_projectiles("行动结束")
 		_clear_fire_control("action_ended" if GameManager.ship_afloat else "ship_sunk")
 		state_changed.emit()
+
+func _cancel_gun_projectiles(reason: String) -> void:
+	for projectile in projectiles:
+		EventBus.record("gun_projectile_cancelled", {"shot_id": projectile.shot_id, "order_id": projectile.order_id, "reason": reason})
+	projectiles.clear()
 
 func fire_ship_gun(contact_id: String = "") -> bool:
 	# Explicit caller IDs must match the existing order; selection never assigns a gun.
@@ -272,14 +293,24 @@ func fire_ship_gun(contact_id: String = "") -> bool:
 		return _reject(reason)
 	var solution := fire_control_solution()
 	var aim: Vector2 = solution.aim_position_km if fire_control_aim_mode == "lead" else last_contact_position_km
+	aim += fire_control_correction_km
+	var weapon: WeaponDefinition = DataManager.get_definition("weapon.deck_gun") as WeaponDefinition
+	var flight_seconds := maxf(0.1, WorldState.ship_position_km.distance_to(aim) / weapon.projectile_speed_km_per_second)
+	_shot_sequence += 1
+	var shot := {"shot_id": "deck_gun.%03d" % _shot_sequence, "order_id": fire_control_order_id, "target_id": target,
+		"origin_km": WorldState.ship_position_km, "aim_position_km": aim, "aim_mode": fire_control_aim_mode,
+		"correction_km": fire_control_correction_km, "fired_seconds": WorldClock.elapsed_seconds,
+		"impact_seconds": WorldClock.elapsed_seconds + flight_seconds, "flight_seconds": flight_seconds}
+	projectiles.append(shot.duplicate(true))
+	projectiles.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.impact_seconds < b.impact_seconds)
 	ship_ammo -= 1
 	next_ship_fire_seconds = WorldClock.elapsed_seconds + 30.0
 	enemy_alert_until_seconds = maxf(enemy_alert_until_seconds, WorldClock.elapsed_seconds + TRACK_MEMORY_SECONDS)
 	EventBus.weapon_fired.emit("weapon.deck_gun")
-	EventBus.record("weapon_fired", {"weapon_id": "weapon.deck_gun", "target_id": target, "order_id": fire_control_order_id, "observation_seconds": last_contact_seconds, "aim_position_km": aim, "aim_mode": fire_control_aim_mode, "solution": solution.duplicate(true), "ammo_remaining": ship_ammo})
-	_damage_enemy(GUN_DAMAGE, "deck_gun")
+	shot.merge({"weapon_id": "weapon.deck_gun", "observation_seconds": last_contact_seconds, "solution": solution.duplicate(true), "ammo_remaining": ship_ammo})
+	EventBus.record("weapon_fired", shot)
 	state_changed.emit()
-	return _accept("甲板炮命中 A1，目标损伤 %.0f%%" % (100.0 - enemy_health))
+	return _accept("甲板炮已发射 / %s · 预计 %.1f 秒后弹着" % [shot.shot_id, flight_seconds])
 
 func ship_gun_block_reason(contact_id: String = "") -> String:
 	if not GameManager.player_alive or GameManager.mode != "bridge" or not GameManager.ship_afloat:
@@ -311,6 +342,9 @@ func ship_gun_block_reason(contact_id: String = "") -> String:
 		if not solution.valid:
 			return solution.reason
 		aim = solution.aim_position_km
+	aim += fire_control_correction_km
+	if weapon == null or not is_finite(weapon.projectile_speed_km_per_second) or weapon.projectile_speed_km_per_second <= 0:
+		return "甲板炮弹道参数无效"
 	if weapon == null or WorldState.ship_position_km.distance_to(aim) > weapon.range_km:
 		return "提前量瞄准点超出甲板炮射程" if fire_control_aim_mode == "lead" else "最后观测目标超出甲板炮射程"
 	var relative := aim - WorldState.ship_position_km
@@ -339,6 +373,46 @@ func fire_control_solution() -> Dictionary:
 		return {"valid": false, "reason": "运动解算不可用：需要已识别的有效雷达接触"}
 	var weapon: WeaponDefinition = DataManager.get_definition("weapon.deck_gun") as WeaponDefinition
 	return _motion.solve(WorldState.ship_position_km, WorldClock.elapsed_seconds, weapon.projectile_speed_km_per_second if weapon != null else 0.0)
+
+func adjust_fire_control_correction(direction: String) -> bool:
+	if GameManager.mode != "bridge" or not GameManager.player_alive or not GameManager.ship_afloat or fire_control_target_id.is_empty() or direction not in ["left", "right", "short", "long", "reset"]:
+		EventBus.record("fire_control_rejected", {"action": "correction", "order_id": fire_control_order_id, "reason": "校射需要舰桥指派及有效方向"})
+		return _reject("校射需要舰桥指派及有效方向")
+	var forward := (last_contact_position_km - WorldState.ship_position_km).normalized()
+	var side := Vector2(-forward.y, forward.x)
+	var offsets := {"left": -side, "right": side, "short": -forward, "long": forward}
+	var candidate: Vector2 = Vector2.ZERO if direction == "reset" else fire_control_correction_km + offsets[direction] * 0.05
+	if candidate.length() > 1.000001:
+		EventBus.record("fire_control_rejected", {"action": "correction", "order_id": fire_control_order_id, "reason": "校射修正不能超过 1000 米"})
+		return _reject("校射修正不能超过 1000 米")
+	fire_control_correction_km = candidate
+	EventBus.record("fire_control_correction", {"order_id": fire_control_order_id, "target_id": fire_control_target_id, "direction": direction, "correction_km": candidate, "queued": get_tree().paused})
+	EventBus.command_issued.emit(fire_control_order_id + ".correction")
+	state_changed.emit()
+	return _accept("校射修正 %.0f 米；下一发采用，已发射炮弹保持原落点" % (candidate.length() * 1000))
+
+func _advance_gun_projectiles(delta: float, total_seconds: float, observer_origin: Vector2) -> void:
+	var cursor := total_seconds - delta
+	while not projectiles.is_empty() and float(projectiles[0].impact_seconds) <= total_seconds:
+		var shot: Dictionary = projectiles.pop_front()
+		_advance_enemy(maxf(0, float(shot.impact_seconds) - cursor))
+		cursor = float(shot.impact_seconds)
+		var observer := observer_origin.lerp(WorldState.ship_position_km, clampf((cursor - (total_seconds - delta)) / delta, 0, 1))
+		var age := cursor - last_contact_seconds
+		var observed: bool = radar_emitting and contact_visible and age >= 0 and age <= 45 and observer.distance_to(WorldState.contact_position_km) <= SCAN_RANGE_KM and WorldState.map.can_navigate_segment(observer, WorldState.contact_position_km)
+		var impact_position: Vector2 = shot.aim_position_km
+		var error := impact_position - WorldState.contact_position_km
+		var hit := enemy_alive and error.length() <= GUN_HIT_RADIUS_KM
+		var result := "hit" if hit else "near_miss" if enemy_alive and error.length() <= GUN_NEAR_MISS_RADIUS_KM else "miss"
+		last_gun_impact = {"shot_id": shot.shot_id, "order_id": shot.order_id, "aim_position_km": shot.aim_position_km, "impact_seconds": cursor, "observed": observed, "result": result if observed else "unobserved"}
+		if observed:
+			last_gun_impact.error_km = error
+			last_gun_impact.error_meters = error.length() * 1000
+		EventBus.record("gun_projectile_impact", last_gun_impact, cursor)
+		if hit:
+			_damage_enemy(GUN_DAMAGE, "deck_gun" if observed else "deck_gun_unobserved", cursor)
+		_feedback("甲板炮命中 A1" if observed and hit else "近失弹：偏差 %.0f 米，可修正下一发" % (error.length() * 1000) if observed and result == "near_miss" else "炮弹未命中：偏差 %.0f 米" % (error.length() * 1000) if observed else "炮弹已到达，结果未观测；重新扫描")
+	_advance_enemy(maxf(0, total_seconds - cursor))
 
 func start_damage_control() -> bool:
 	if GameManager.mode != "bridge" or not GameManager.ship_afloat:
@@ -617,10 +691,12 @@ func complete_mission() -> bool:
 
 func _on_world_time_advanced(total_seconds: float) -> void:
 	var delta := total_seconds - _last_clock_seconds
+	var observer_origin := _last_tick_ship_position
+	_last_tick_ship_position = WorldState.ship_position_km
 	_last_clock_seconds = total_seconds
 	if delta <= 0.0 or GameManager.mode == "settlement" or GameManager.mode == "campaign_failed":
 		return
-	_advance_enemy(delta)
+	_advance_gun_projectiles(delta, total_seconds, observer_origin)
 	var flight_delta := delta
 	if GameManager.mode == "switching":
 		var waiting := minf(delta, switch_seconds_remaining)
@@ -733,17 +809,17 @@ func _advance_aircraft(delta: float) -> void:
 		EventBus.record("aircraft_fuel_warning", {"seconds_remaining": aircraft_fuel_seconds, "level": warning_level})
 		_feedback("燃油紧急：不足 30 秒，立即寻找回收窗口" if warning_level == 2 else "燃油预警：不足两分钟，请返航回收")
 
-func _damage_enemy(amount: float, source: String) -> void:
+func _damage_enemy(amount: float, source: String, simulation_seconds: float = -1.0) -> void:
 	enemy_health = maxf(0.0, enemy_health - amount)
 	EventBus.damage_reported.emit(CONTACT_ID)
-	EventBus.record("enemy_damaged", {"health": enemy_health, "source": source})
+	EventBus.record("enemy_damaged", {"health": enemy_health, "source": source}, simulation_seconds)
 	if enemy_health <= 0.0:
 		enemy_alive = false
 		enemy_tracking_ship = false
 		enemy_alert_until_seconds = 0.0
 		contact_visible = false
-		_clear_fire_control("target_destroyed")
-		EventBus.record("enemy_destroyed", {"id": CONTACT_ID})
+		_clear_fire_control("target_destroyed", simulation_seconds)
+		EventBus.record("enemy_destroyed", {"id": CONTACT_ID}, simulation_seconds)
 
 func _accept(message: String) -> bool:
 	_feedback(message)

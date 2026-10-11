@@ -97,8 +97,9 @@ func _run() -> void:
 	_check(radar.gun_ready and "可开火" in details.get_node("GunStatus").text, "in-range forward contact produces a ready firing solution")
 	details.get_node("RadarActions/Fire").emit_signal("pressed")
 	await process_frame
-	_check(mission.enemy_health == 50.0 and not radar.gun_ready and "装填" in details.get_node("GunStatus").text, "successful shot updates damage and reload display")
+	_check(mission.enemy_health == 100.0 and not radar.gun_ready and "装填" in details.get_node("GunStatus").text, "launch updates reload without premature damage")
 	clock.advance(10.0)
+	_check(mission.enemy_health == 50.0, "arriving shell updates damage display")
 	_check(details.get_node("ShipControls/DamageControl").visible, "incoming damage exposes repair controls")
 	details.get_node("ShipControls/DamageControl/Repair").emit_signal("pressed")
 	_check(mission.repair_teams == 1 and details.get_node("ShipControls/DamageControl/Repair").disabled and "损管" in details.get_node("GunStatus").text, "repair button starts work and explains gun unavailability")

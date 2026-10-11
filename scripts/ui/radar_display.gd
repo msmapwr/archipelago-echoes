@@ -43,6 +43,13 @@ var navigation_target_km: Vector2 = Vector2.ZERO
 var navigation_target_visible: bool = false
 var _keyboard_offset_km: Vector2 = Vector2.ZERO
 var _fire_control_prediction: Dictionary = {}
+var _gun_projectiles: Array = []
+var _gun_impact: Dictionary = {}
+
+func set_gun_ballistics(shots: Array, impact: Dictionary) -> void:
+	_gun_projectiles = shots.duplicate(true)
+	_gun_impact = impact.duplicate(true)
+	queue_redraw()
 
 func set_fire_control_prediction(solution: Dictionary) -> void:
 	_fire_control_prediction = solution.duplicate(true)
@@ -195,6 +202,7 @@ func _draw() -> void:
 		_draw_navigation(center, radius)
 	_draw_contact(center, radius)
 	_draw_prediction(center, radius)
+	_draw_ballistics(center, radius)
 	_draw_readout(center, radius)
 	if hull_integrity < 50.0:
 		draw_arc(center, radius - 4.0, deg_to_rad(113.0), deg_to_rad(183.0), 32, Color("#8d5e3b"), 3.0, true)
@@ -380,6 +388,28 @@ func _draw_prediction(center: Vector2, radius: float) -> void:
 	draw_line(point + Vector2(-6, 6), point + Vector2(6, -6), tint)
 	var label_offset := Vector2(-96 if point.x > center.x else 14, 42)
 	draw_string(ThemeDB.fallback_font, point + label_offset, "LEAD +%.1fs" % _fire_control_prediction.flight_seconds, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, tint)
+
+func _draw_ballistics(center: Vector2, radius: float) -> void:
+	if flight_navigation: return
+	for shot in _gun_projectiles:
+		var origin: Vector2 = shot.origin_km
+		var aim: Vector2 = shot.aim_position_km
+		var fraction := clampf((WorldClock.elapsed_seconds - shot.fired_seconds) / shot.flight_seconds, 0, 1)
+		var flight_offset := origin.lerp(aim, fraction) - own_position_km
+		if flight_offset.length() <= display_range_km:
+			draw_circle(center + flight_offset * radius / display_range_km, 2.5, HOT)
+	if not _gun_impact.get("observed", false): return
+	var age: float = WorldClock.elapsed_seconds - _gun_impact.impact_seconds
+	if age < 0 or age > 15: return
+	var offset: Vector2 = _gun_impact.aim_position_km - own_position_km
+	if offset.length() > display_range_km: return
+	var point := center + offset * radius / display_range_km
+	var tint := Color(HOT if _gun_impact.result == "hit" else AMBER, 1 - age / 15)
+	draw_arc(point, 8 + age * 0.3, 0, TAU, 24, tint, 1)
+	if _gun_impact.result != "hit":
+		var error: Vector2 = _gun_impact.error_km
+		var text := "SPLASH %.0fm E%.0f N%.0f" % [error.length() * 1000, error.x * 1000, -error.y * 1000]
+		draw_string(ThemeDB.fallback_font, point + Vector2(-75, -32), text, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, tint)
 
 func _draw_readout(center: Vector2, radius: float) -> void:
 	var font := ThemeDB.fallback_font

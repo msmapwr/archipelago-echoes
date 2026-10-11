@@ -98,7 +98,7 @@ func observation_and_resource_gates() -> void:
 	world.contact_position_km = Vector2(49, 49)
 	check(mission.ship_gun_block_reason().is_empty() and mission.last_contact_position_km == observed, "readiness uses last observation rather than hidden live position")
 	world.contact_position_km = live
-	check(mission.fire_ship_gun() and mission.ship_ammo == 5 and mission.enemy_health == 50 and mission.fire_control_order_id == order, "one command fires one round against assigned target")
+	check(mission.fire_ship_gun() and mission.ship_ammo == 5 and mission.enemy_health == 100 and mission.fire_control_order_id == order, "one command fires one round against assigned target")
 	var shot: Dictionary = {}
 	for event in events.history:
 		if event.kind == "weapon_fired": shot = event
@@ -108,6 +108,7 @@ func observation_and_resource_gates() -> void:
 	check(mission.clear_fire_control_target() and mission.ship_ammo == 5 and mission.next_ship_fire_seconds == reload_at, "cancellation cannot reset reload")
 	check(mission.assign_fire_control_target(mission.CONTACT_ID), "reassignment during reload allowed")
 	clock.advance(30)
+	check(mission.enemy_health == 50, "arriving shell deals exactly one hit")
 	mission.set_radar_emitting(false)
 	check(not mission.fire_ship_gun() and mission.last_message.contains("静默") and not mission.fire_control_target_id.is_empty(), "silence suspends rather than clears assignment")
 	mission.set_radar_emitting(true)
@@ -123,7 +124,9 @@ func observation_and_resource_gates() -> void:
 	check(not mission.contact_visible and not mission.fire_control_target_id.is_empty() and not mission.fire_ship_gun() and mission.ship_ammo == 5, "lost contact preserves order but blocks fire")
 	world.contact_position_km = live
 	mission.scan()
-	check(mission.fire_ship_gun() and not mission.enemy_alive and mission.fire_control_target_id.is_empty() and mission.ship_ammo == 4, "reacquisition permits second shot and destroyed target clears order")
+	check(mission.fire_ship_gun() and mission.enemy_alive and mission.ship_ammo == 4, "reacquisition permits second shell launch")
+	clock.advance(10)
+	check(not mission.enemy_alive and mission.fire_control_target_id.is_empty(), "second arriving hit destroys target and clears order")
 	check(not mission.assign_fire_control_target(mission.CONTACT_ID) and not mission.fire_ship_gun(), "destroyed target cannot be reassigned or fired upon")
 
 func ui_archive_guidance() -> void:

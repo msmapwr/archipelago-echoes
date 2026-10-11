@@ -98,11 +98,13 @@ func controller_lifecycle() -> void:
 	check(lead_range != observed_range and lead_blocked == (lead_range > weapon.range_km) and observed_blocked == (observed_range > weapon.range_km) and lead_blocked != observed_blocked, "range gate follows each mode's distinct aim coordinate")
 	mission.set_fire_control_aim_mode("lead")
 	weapon.range_km = original_range
-	check(mission.fire_ship_gun() and mission.ship_ammo == ammo - 1 and mission.enemy_health == 50, "lead shot remains manual single deterministic hit")
+	check(mission.fire_ship_gun() and mission.ship_ammo == ammo - 1 and mission.enemy_health == 100, "lead shot launches one round with deferred damage")
 	var shot: Dictionary = {}
 	for event in events.history:
 		if event.kind == "weapon_fired": shot = event.details
 	check(shot.get("aim_mode", "") == "lead" and shot.get("order_id", "") == order and shot.get("aim_position_km", Vector2.ZERO) == s.aim_position_km and shot.get("solution", {}).get("valid", false), "shot archives exact lead snapshot and order")
+	clock.advance(10)
+	check(mission.enemy_health == 50, "measured lead intercept hits at arrival")
 	var reload: float = mission.next_ship_fire_seconds
 	mission.set_fire_control_aim_mode("observed")
 	mission.set_fire_control_aim_mode("lead")
