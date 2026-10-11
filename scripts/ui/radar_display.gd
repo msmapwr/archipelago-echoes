@@ -428,6 +428,9 @@ func _draw_gun_arc(center: Vector2, radius: float) -> void:
 	draw_arc(center, reach, start, end, 64, Color(tint, 0.45), 1.2, true)
 	for angle in [start, end]:
 		draw_line(center, center + Vector2(cos(angle), sin(angle)) * reach, Color(tint, 0.24), 1.0, true)
+	if MissionController.fire_control_locked:
+		var angle := deg_to_rad(MissionController.turret_heading_degrees - 90)
+		draw_line(center, center + Vector2(cos(angle), sin(angle)) * reach, Color(PHOSPHOR, 0.7), 1.5, true)
 
 func _contact_position() -> Vector2:
 	var center := size * 0.5

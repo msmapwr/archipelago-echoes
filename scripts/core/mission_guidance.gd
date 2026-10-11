@@ -14,6 +14,10 @@ static func project(state: Dictionary) -> Dictionary:
 			result.fire_control_hint = "甲板炮已指派 A1；可手动射击或撤销。" if reason.is_empty() else "甲板炮已指派 A1；" + reason + "。可排除阻塞或撤销。"
 			if state.get("fire_control_lead", false) and not state.get("fire_control_motion_ready", false):
 				result.fire_control_hint = "提前量不足：间隔 1–45 秒复测；或切回最后观测瞄准。"
+			if state.get("fire_control_locked", false):
+				result.fire_control_hint = "持续照射：8 秒内复测，等待炮塔对准后手动开火；可解除照射。"
+			elif str(state.get("fire_control_lock_status", "")).begins_with("失锁"):
+				result.fire_control_hint = "照射已中断：扫描后重新锁定；也可按手动射界开火。"
 			var impact: Dictionary = state.get("fire_control_impact", {})
 			if impact.get("observed", false) and impact.get("result", "") in ["near_miss", "miss"]:
 				result.fire_control_hint = "上一发未命中；参考弹着偏差，以 50 米步长校射，复测后再射击。"

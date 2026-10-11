@@ -36,6 +36,8 @@ var clear_target_button: Button
 
 var selected_contact_id: String = ""
 var aim_mode_button: Button
+var lock_button: Button
+var aim_controls: HBoxContainer
 var correction_controls: HBoxContainer
 var _next_auto_scan_seconds: float = 30.0
 var _displayed_second: int = -1
@@ -100,12 +102,22 @@ func _build_fire_control_ui() -> void:
 	aim_mode_button.name = "AimMode"
 	aim_mode_button.custom_minimum_size.y = 38
 	aim_mode_button.pressed.connect(func() -> void: MissionController.set_fire_control_aim_mode("lead" if MissionController.fire_control_aim_mode == "observed" else "observed"))
-	details.add_child(aim_mode_button)
-	details.move_child(aim_mode_button, fire_control_actions.get_index() + 1)
+	aim_controls = HBoxContainer.new()
+	aim_controls.name = "AimControls"
+	details.add_child(aim_controls)
+	details.move_child(aim_controls, fire_control_actions.get_index() + 1)
+	aim_mode_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	aim_controls.add_child(aim_mode_button)
+	lock_button = Button.new()
+	lock_button.name = "Lock"
+	lock_button.custom_minimum_size.y = 38
+	lock_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lock_button.pressed.connect(func() -> void: MissionController.set_fire_control_lock(not MissionController.fire_control_locked))
+	aim_controls.add_child(lock_button)
 	correction_controls = HBoxContainer.new()
 	correction_controls.name = "CorrectionControls"
 	details.add_child(correction_controls)
-	details.move_child(correction_controls, aim_mode_button.get_index() + 1)
+	details.move_child(correction_controls, aim_controls.get_index() + 1)
 	for direction in ["left", "right", "short", "long", "reset"]:
 		var button := Button.new()
 		button.name = direction
@@ -116,7 +128,7 @@ func _build_fire_control_ui() -> void:
 		button.pressed.connect(MissionController.adjust_fire_control_correction.bind(direction))
 		correction_controls.add_child(button)
 	# Keep combat commands visible before the optional full structural preview.
-	details.move_child(contact_icon, aim_mode_button.get_index() + 1)
+	details.move_child(contact_icon, correction_controls.get_index() + 1)
 
 func _build_unit_library() -> void:
 	library_shade = ColorRect.new()
@@ -225,6 +237,8 @@ func guidance_state() -> Dictionary:
 	state.fire_control_reason = MissionController.ship_gun_block_reason()
 	state.fire_control_lead = MissionController.fire_control_aim_mode == "lead"
 	state.fire_control_motion_ready = MissionController.fire_control_solution().valid
+	state.fire_control_locked = MissionController.fire_control_locked
+	state.fire_control_lock_status = MissionController.lock_status
 	state.fire_control_impact = MissionController.last_gun_impact if MissionController.last_gun_impact.get("order_id", "") == MissionController.fire_control_order_id else {}
 	state.enemy_alive = MissionController.enemy_alive
 	return state
@@ -298,6 +312,7 @@ func _archive_fire_control(reason_before_open: String) -> String:
 	var lines: PackedStringArray = ["甲板炮 / " + ("未指派" if MissionController.fire_control_target_id.is_empty() else "A1 · " + MissionController.fire_control_order_id), "打开档案前 / " + ("可手动射击" if reason_before_open.is_empty() else reason_before_open), "阅读期间不能射击；关闭后重新验证条件。交战不是本关胜利条件。", ""]
 	lines.insert(2, "瞄准 / " + ("运动提前量" if MissionController.fire_control_aim_mode == "lead" else "最后观测"))
 	lines.insert(3, _motion_description(solution))
+	lines.insert(4, "照射 / " + MissionController.lock_status)
 	var entries: PackedStringArray = []
 	for event in EventBus.history:
 		var kind: String = event.get("kind", "")
@@ -568,6 +583,10 @@ func _refresh_gun_status() -> void:
 	var reason := MissionController.ship_gun_block_reason()
 	fire_control_actions.visible = GameManager.mode == "bridge"
 	aim_mode_button.visible = fire_control_actions.visible
+	aim_controls.visible = fire_control_actions.visible
+	lock_button.text = "解除照射" if MissionController.fire_control_locked else "锁定照射"
+	lock_button.disabled = not MissionController.fire_control_lock_reason().is_empty() and not MissionController.fire_control_locked
+	lock_button.tooltip_text = MissionController.lock_status + "\n每 8 秒内复测；炮塔 20°/秒跟踪，不自动射击。"
 	correction_controls.visible = fire_control_actions.visible
 	for button in correction_controls.get_children():
 		button.disabled = MissionController.fire_control_target_id.is_empty() or not GameManager.ship_afloat or not GameManager.player_alive
@@ -583,7 +602,7 @@ func _refresh_gun_status() -> void:
 	var weapon_range := weapon.range_km if weapon != null else 0.0
 	gun_status.text = "火控 / %s" % ("可开火 · %.0f km / 前向 ±%.0f°" % [weapon_range, MissionController.GUN_HALF_ARC_DEGREES] if reason.is_empty() else reason)
 	gun_status.text = ("甲板炮 → A1 / " + MissionController.fire_control_order_id if not MissionController.fire_control_target_id.is_empty() else "甲板炮 / 未指派") + "\n" + gun_status.text
-	gun_status.text += "\n" + _motion_description(solution)
+	gun_status.text += "\n" + (MissionController.lock_status + " · " if MissionController.fire_control_locked or MissionController.lock_status.begins_with("失锁") else "") + _motion_description(solution)
 	gun_status.text += "\n修正 %.0f m · %s" % [MissionController.fire_control_correction_km.length() * 1000, "炮弹飞行中 / %.1f 秒" % maxf(0, MissionController.projectiles[0].impact_seconds - WorldClock.elapsed_seconds) if not MissionController.projectiles.is_empty() else _impact_description(MissionController.last_gun_impact)]
 	gun_status.add_theme_color_override("font_color", Color("#83e8aa") if reason.is_empty() else Color("#e8b968"))
 	_button("RadarActions/Fire").tooltip_text = "甲板炮 %.0f km / 舰艏两侧各 %.0f°\n%s" % [weapon_range, MissionController.GUN_HALF_ARC_DEGREES, "可开火" if reason.is_empty() else reason]
@@ -691,6 +710,8 @@ func _on_event_recorded(_event: Dictionary) -> void:
 func _event_line(event: Dictionary) -> String:
 	var details_data: Dictionary = event.get("details", {})
 	match event.get("kind", ""):
+		"fire_control_locked": return "锁定照射 / " + str(details_data.get("order_id", ""))
+		"fire_control_lock_lost": return "照射终止 / %s · %s" % [details_data.get("order_id", ""), details_data.get("reason", "")]
 		"gun_projectile_impact": return "甲板炮弹着 / %s · %s · %s" % [details_data.get("shot_id", ""), details_data.get("order_id", ""), _impact_description(details_data)]
 		"gun_projectile_cancelled": return "炮弹清理 / %s · %s" % [details_data.get("shot_id", ""), details_data.get("reason", "行动结束")]
 		"fire_control_correction": return "校射修正 / %s · %.0f m" % [details_data.get("order_id", ""), (details_data.get("correction_km", Vector2.ZERO) as Vector2).length() * 1000]

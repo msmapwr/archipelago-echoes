@@ -27,6 +27,11 @@ var last_contact_range_km: float = 0.0
 var last_contact_seconds: float = 0.0
 var last_contact_heading_degrees: float = 0.0
 var fire_control_aim_mode: String = "observed"
+const LOCK_MEMORY_SECONDS := 8.0
+const TURRET_RATE_DEGREES := 20.0
+var fire_control_locked := false
+var turret_heading_degrees := 0.0
+var lock_status := "未锁定"
 var _motion = preload("res://scripts/core/fire_control_solution.gd").new()
 var fire_control_correction_km := Vector2.ZERO
 var projectiles: Array[Dictionary] = []
@@ -96,6 +101,9 @@ func _initialize_scenario() -> void:
 	last_contact_seconds = 0.0
 	last_contact_heading_degrees = 0.0
 	fire_control_aim_mode = "observed"
+	fire_control_locked = false
+	turret_heading_degrees = WorldState.ship_heading_degrees
+	lock_status = "未锁定"
 	_motion.reset()
 	fire_control_correction_km = Vector2.ZERO
 	projectiles.clear()
@@ -149,6 +157,7 @@ func scan() -> bool:
 	var range_km := WorldState.contact_range_km()
 	contact_visible = enemy_alive and range_km <= SCAN_RANGE_KM and WorldState.map.can_navigate_segment(WorldState.ship_position_km, WorldState.contact_position_km)
 	if not contact_visible:
+		_release_fire_control_lock("接触失联")
 		_motion.reset()
 		if was_visible:
 			EventBus.contact_lost.emit(CONTACT_ID)
@@ -180,6 +189,7 @@ func set_radar_emitting(is_enabled: bool) -> bool:
 		return _reject("雷达状态未改变")
 	radar_emitting = is_enabled
 	if not is_enabled:
+		_release_fire_control_lock("雷达静默")
 		_motion.reset()
 	EventBus.record("radar_emission_changed", {"emitting": radar_emitting})
 	if radar_emitting:
@@ -263,6 +273,7 @@ func _on_fire_control_event(event: Dictionary) -> void:
 		state_changed.emit()
 
 func _clear_fire_control(reason: String, simulation_seconds: float = -1.0) -> void:
+	_release_fire_control_lock(reason, simulation_seconds)
 	if fire_control_target_id.is_empty():
 		return
 	var target := fire_control_target_id
@@ -274,6 +285,8 @@ func _clear_fire_control(reason: String, simulation_seconds: float = -1.0) -> vo
 	EventBus.command_issued.emit(order + ".clear")
 
 func _on_fire_control_mode_changed(_previous: String, current: String) -> void:
+	if current != "bridge":
+		_release_fire_control_lock("离开舰桥")
 	if current in ["settlement", "campaign_failed"] or not GameManager.ship_afloat:
 		_cancel_gun_projectiles("行动结束")
 		_clear_fire_control("action_ended" if GameManager.ship_afloat else "ship_sunk")
@@ -299,7 +312,7 @@ func fire_ship_gun(contact_id: String = "") -> bool:
 	_shot_sequence += 1
 	var shot := {"shot_id": "deck_gun.%03d" % _shot_sequence, "order_id": fire_control_order_id, "target_id": target,
 		"origin_km": WorldState.ship_position_km, "aim_position_km": aim, "aim_mode": fire_control_aim_mode,
-		"correction_km": fire_control_correction_km, "fired_seconds": WorldClock.elapsed_seconds,
+		"correction_km": fire_control_correction_km, "locked": fire_control_locked, "turret_heading_degrees": turret_heading_degrees, "fired_seconds": WorldClock.elapsed_seconds,
 		"impact_seconds": WorldClock.elapsed_seconds + flight_seconds, "flight_seconds": flight_seconds}
 	projectiles.append(shot.duplicate(true))
 	projectiles.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.impact_seconds < b.impact_seconds)
@@ -352,9 +365,69 @@ func ship_gun_block_reason(contact_id: String = "") -> String:
 	var bearing_error := absf(wrapf(bearing - WorldState.ship_heading_degrees, -180.0, 180.0))
 	if bearing_error > GUN_HALF_ARC_DEGREES:
 		return "目标在甲板炮射界外：调整舰艏朝向 A1"
+	if fire_control_locked:
+		var lock_reason := fire_control_lock_reason()
+		if not lock_reason.is_empty(): return lock_reason
+		if absf(wrapf(bearing - turret_heading_degrees, -180.0, 180.0)) > 2.0:
+			return "炮塔跟踪中：等待炮口对准"
 	if not WorldState.map.can_navigate_segment(WorldState.ship_position_km, aim):
 		return "岛屿遮挡射线"
 	return ""
+
+func fire_control_lock_reason() -> String:
+	if GameManager.mode != "bridge" or not GameManager.ship_afloat or not GameManager.player_alive:
+		return "照射需要舰桥指挥权"
+	if fire_control_target_id.is_empty() or not enemy_alive or not GameManager.target_identified:
+		return "照射需要已识别的指派目标"
+	if not radar_emitting or not contact_visible:
+		return "照射中断：重新开机并扫描"
+	if WorldClock.elapsed_seconds - last_contact_seconds > LOCK_MEMORY_SECONDS:
+		return "照射过期：8 秒内复测，再重新锁定"
+	return ""
+
+func set_fire_control_lock(enabled: bool) -> bool:
+	var reason := fire_control_lock_reason() if enabled else ("照射需要舰桥指挥权" if GameManager.mode != "bridge" or not GameManager.player_alive or not GameManager.ship_afloat else "")
+	if not reason.is_empty():
+		EventBus.record("fire_control_rejected", {"action": "lock", "order_id": fire_control_order_id, "reason": reason})
+		return _reject(reason)
+	if enabled == fire_control_locked: return true
+	if enabled:
+		fire_control_locked = true
+		lock_status = "持续照射"
+		EventBus.record("fire_control_locked", {"order_id": fire_control_order_id, "target_id": fire_control_target_id, "queued": get_tree().paused})
+	else:
+		_release_fire_control_lock("手动解除")
+	EventBus.command_issued.emit(fire_control_order_id + ".lock")
+	state_changed.emit()
+	return _accept("持续照射：每 8 秒内复测；炮塔跟踪，不自动开火" if enabled else "恢复手动射界")
+
+func _release_fire_control_lock(reason: String, simulation_seconds: float = -1.0) -> void:
+	if not fire_control_locked: return
+	fire_control_locked = false
+	lock_status = "失锁 / " + reason
+	EventBus.record("fire_control_lock_lost", {"order_id": fire_control_order_id, "target_id": fire_control_target_id, "reason": reason}, simulation_seconds)
+
+func _advance_fire_control_lock(delta: float) -> void:
+	if not fire_control_locked: return
+	var reason := fire_control_lock_reason()
+	if not reason.is_empty():
+		_release_fire_control_lock(reason)
+		return
+	var aim := last_contact_position_km
+	if fire_control_aim_mode == "lead":
+		var solution := fire_control_solution()
+		if not solution.valid:
+			lock_status = "照射 / 等待运动解"
+			return
+		aim = solution.aim_position_km
+	aim += fire_control_correction_km
+	var relative := aim - WorldState.ship_position_km
+	var bearing := rad_to_deg(atan2(relative.x, -relative.y))
+	bearing = WorldState.ship_heading_degrees + clampf(wrapf(bearing - WorldState.ship_heading_degrees, -180, 180), -GUN_HALF_ARC_DEGREES, GUN_HALF_ARC_DEGREES)
+	var error := wrapf(bearing - turret_heading_degrees, -180.0, 180.0)
+	turret_heading_degrees = wrapf(turret_heading_degrees + clampf(error, -TURRET_RATE_DEGREES * delta, TURRET_RATE_DEGREES * delta), 0, 360)
+	turret_heading_degrees = wrapf(WorldState.ship_heading_degrees + clampf(wrapf(turret_heading_degrees - WorldState.ship_heading_degrees, -180, 180), -GUN_HALF_ARC_DEGREES, GUN_HALF_ARC_DEGREES), 0, 360)
+	lock_status = "照射 / 已对准" if absf(wrapf(bearing - turret_heading_degrees, -180, 180)) <= 2 else "照射 / 炮塔跟踪"
 
 func set_fire_control_aim_mode(value: String) -> bool:
 	if value not in ["observed", "lead"] or GameManager.mode != "bridge" or not GameManager.player_alive or not GameManager.ship_afloat:
@@ -697,6 +770,7 @@ func _on_world_time_advanced(total_seconds: float) -> void:
 	if delta <= 0.0 or GameManager.mode == "settlement" or GameManager.mode == "campaign_failed":
 		return
 	_advance_gun_projectiles(delta, total_seconds, observer_origin)
+	_advance_fire_control_lock(delta)
 	var flight_delta := delta
 	if GameManager.mode == "switching":
 		var waiting := minf(delta, switch_seconds_remaining)
