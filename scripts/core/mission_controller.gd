@@ -29,6 +29,9 @@ var last_contact_seconds: float = 0.0
 var ship_health: float = 100.0
 var ship_ammo: int = 6
 var next_ship_fire_seconds: float = 0.0
+var fire_control_target_id: String = ""
+var fire_control_order_id: String = ""
+var _fire_control_sequence: int = 0
 var repair_teams: int = 2
 var repair_seconds_remaining: float = 0.0
 var enemy_health: float = 100.0
@@ -60,6 +63,8 @@ var _last_clock_seconds: float = 0.0
 
 func _ready() -> void:
 	WorldClock.time_advanced.connect(_on_world_time_advanced)
+	EventBus.mode_changed.connect(_on_fire_control_mode_changed)
+	EventBus.event_recorded.connect(_on_fire_control_event)
 	_initialize_scenario()
 
 func restart_scenario() -> void:
@@ -82,6 +87,9 @@ func _initialize_scenario() -> void:
 	ship_health = 100.0
 	ship_ammo = 6
 	next_ship_fire_seconds = 0.0
+	fire_control_target_id = ""
+	fire_control_order_id = ""
+	_fire_control_sequence = 0
 	repair_teams = 2
 	repair_seconds_remaining = 0.0
 	enemy_health = 100.0
@@ -181,30 +189,100 @@ func identify_contact() -> bool:
 	state_changed.emit()
 	return _accept("A1 已确认，首关目标情报完成")
 
-func fire_ship_gun(contact_id: String) -> bool:
-	var reason := ship_gun_block_reason(contact_id)
+func fire_control_assignment_reason(contact_id: String) -> String:
+	if not GameManager.player_alive or GameManager.mode != "bridge" or not GameManager.ship_afloat:
+		return "火控指派需要未结束行动中的舰桥指挥权"
+	if contact_id != CONTACT_ID:
+		return "请先选择 A1，再指派甲板炮目标"
+	if not GameManager.target_identified:
+		return "目标尚未确认，禁止指派"
+	if not enemy_alive:
+		return "目标已失能，无法指派"
+	if not radar_emitting or not contact_visible or contact_scan_count == 0:
+		return "没有有效观测；开启雷达并重新扫描后指派"
+	if WorldClock.elapsed_seconds - last_contact_seconds > 45.0:
+		return "接触情报已过期，请重新扫描后指派"
+	return ""
+
+func assign_fire_control_target(contact_id: String) -> bool:
+	var reason := fire_control_assignment_reason(contact_id)
 	if not reason.is_empty():
+		EventBus.record("fire_control_rejected", {"action": "assign", "target_id": contact_id, "order_id": fire_control_order_id, "reason": reason})
+		return _reject(reason)
+	if fire_control_target_id == contact_id:
+		return _accept("甲板炮已指派 A1；重复指派不生成新命令")
+	_fire_control_sequence += 1
+	fire_control_target_id = contact_id
+	fire_control_order_id = "fire_control.%03d" % _fire_control_sequence
+	EventBus.record("fire_control_assigned", {"weapon_id": "weapon.deck_gun", "target_id": contact_id, "order_id": fire_control_order_id, "observation_seconds": last_contact_seconds, "queued": get_tree().paused})
+	EventBus.command_issued.emit(fire_control_order_id)
+	state_changed.emit()
+	return _accept("甲板炮目标已指派 A1；继续模拟后可手动射击" if get_tree().paused else "甲板炮目标已指派 A1；查看火控条件后手动射击")
+
+func clear_fire_control_target() -> bool:
+	if not GameManager.player_alive or GameManager.mode != "bridge" or not GameManager.ship_afloat:
+		return _reject_fire_control_clear("撤销火控指派需要舰桥指挥权")
+	if fire_control_target_id.is_empty():
+		return _reject_fire_control_clear("甲板炮当前没有指派目标")
+	_clear_fire_control("player_cancelled")
+	state_changed.emit()
+	return _accept("甲板炮目标指派已撤销；不会自动射击，装填与弹药保持不变")
+
+func _reject_fire_control_clear(reason: String) -> bool:
+	EventBus.record("fire_control_rejected", {"action": "clear", "target_id": fire_control_target_id, "order_id": fire_control_order_id, "reason": reason})
+	return _reject(reason)
+
+func _on_fire_control_event(event: Dictionary) -> void:
+	if event.get("kind", "") == "ship_sunk":
+		_clear_fire_control("ship_sunk")
+		state_changed.emit()
+
+func _clear_fire_control(reason: String) -> void:
+	if fire_control_target_id.is_empty():
+		return
+	var target := fire_control_target_id
+	var order := fire_control_order_id
+	fire_control_target_id = ""
+	fire_control_order_id = ""
+	EventBus.record("fire_control_cleared", {"weapon_id": "weapon.deck_gun", "target_id": target, "order_id": order, "reason": reason})
+	EventBus.command_issued.emit(order + ".clear")
+
+func _on_fire_control_mode_changed(_previous: String, current: String) -> void:
+	if current in ["settlement", "campaign_failed"] or not GameManager.ship_afloat:
+		_clear_fire_control("action_ended" if GameManager.ship_afloat else "ship_sunk")
+		state_changed.emit()
+
+func fire_ship_gun(contact_id: String = "") -> bool:
+	# Explicit caller IDs must match the existing order; selection never assigns a gun.
+	var target := fire_control_target_id if contact_id.is_empty() else contact_id
+	var reason := ship_gun_block_reason(target)
+	if not reason.is_empty():
+		EventBus.record("ship_gun_rejected", {"weapon_id": "weapon.deck_gun", "target_id": target, "order_id": fire_control_order_id, "reason": reason})
 		return _reject(reason)
 	ship_ammo -= 1
 	next_ship_fire_seconds = WorldClock.elapsed_seconds + 30.0
 	enemy_alert_until_seconds = maxf(enemy_alert_until_seconds, WorldClock.elapsed_seconds + TRACK_MEMORY_SECONDS)
 	EventBus.weapon_fired.emit("weapon.deck_gun")
-	EventBus.record("weapon_fired", {"weapon_id": "weapon.deck_gun", "ammo_remaining": ship_ammo})
+	EventBus.record("weapon_fired", {"weapon_id": "weapon.deck_gun", "target_id": target, "order_id": fire_control_order_id, "observation_seconds": last_contact_seconds, "aim_position_km": last_contact_position_km, "ammo_remaining": ship_ammo})
 	_damage_enemy(GUN_DAMAGE, "deck_gun")
 	state_changed.emit()
 	return _accept("甲板炮命中 A1，目标损伤 %.0f%%" % (100.0 - enemy_health))
 
-func ship_gun_block_reason(contact_id: String) -> String:
-	if GameManager.mode != "bridge" or not GameManager.ship_afloat:
+func ship_gun_block_reason(contact_id: String = "") -> String:
+	if not GameManager.player_alive or GameManager.mode != "bridge" or not GameManager.ship_afloat:
 		return "甲板炮仅可在舰桥指挥"
 	if get_tree().paused:
 		return "模拟暂停，无法开火"
 	if not radar_emitting:
 		return "雷达静默中，火控无法跟踪接触"
-	if contact_id != CONTACT_ID or not contact_visible or not enemy_alive:
-		return "没有可射击的已选接触"
 	if not GameManager.target_identified:
 		return "目标尚未确认，禁止开火"
+	if fire_control_target_id.is_empty():
+		return "甲板炮尚未指派目标：选择 A1 后点击指派目标"
+	if not contact_id.is_empty() and contact_id != fire_control_target_id:
+		return "射击目标与甲板炮指派不符，请重新指派"
+	if not contact_visible or not enemy_alive:
+		return "已指派接触当前失联或失能，请重新扫描"
 	if repair_seconds_remaining > 0.0:
 		return "损管作业中，甲板炮暂时停用"
 	if ship_ammo <= 0:
@@ -212,16 +290,16 @@ func ship_gun_block_reason(contact_id: String) -> String:
 	if WorldClock.elapsed_seconds < next_ship_fire_seconds:
 		return "甲板炮装填中：还需 %.0f 秒" % ceilf(next_ship_fire_seconds - WorldClock.elapsed_seconds)
 	var weapon: WeaponDefinition = DataManager.get_definition("weapon.deck_gun") as WeaponDefinition
-	if weapon == null or WorldState.contact_range_km() > weapon.range_km:
-		return "目标超出甲板炮射程"
 	if WorldClock.elapsed_seconds - last_contact_seconds > 45.0:
 		return "接触情报已过期，请重新扫描"
+	if weapon == null or WorldState.ship_position_km.distance_to(last_contact_position_km) > weapon.range_km:
+		return "最后观测目标超出甲板炮射程"
 	var relative := last_contact_position_km - WorldState.ship_position_km
 	var bearing := rad_to_deg(atan2(relative.x, -relative.y))
 	var bearing_error := absf(wrapf(bearing - WorldState.ship_heading_degrees, -180.0, 180.0))
 	if bearing_error > GUN_HALF_ARC_DEGREES:
 		return "目标在甲板炮射界外：调整舰艏朝向 A1"
-	if not WorldState.map.can_navigate_segment(WorldState.ship_position_km, WorldState.contact_position_km):
+	if not WorldState.map.can_navigate_segment(WorldState.ship_position_km, last_contact_position_km):
 		return "岛屿遮挡射线"
 	return ""
 
@@ -541,6 +619,7 @@ func _enemy_attack(total_seconds: float) -> void:
 	EventBus.record("ship_damaged", {"health": ship_health, "source": CONTACT_ID})
 	_feedback("母舰遭到还击，舰体 %.0f%%" % ship_health)
 	if ship_health <= 0.0:
+		_clear_fire_control("ship_sunk")
 		WorldState.set_ship_command(WorldState.ship_heading_degrees, 0.0)
 		GameManager.report_ship_sunk()
 		_feedback("母舰沉没；空中指挥官可转往友方机场" if aircraft_airborne else "母舰沉没，战役结束")
@@ -626,6 +705,7 @@ func _damage_enemy(amount: float, source: String) -> void:
 		enemy_tracking_ship = false
 		enemy_alert_until_seconds = 0.0
 		contact_visible = false
+		_clear_fire_control("target_destroyed")
 		EventBus.record("enemy_destroyed", {"id": CONTACT_ID})
 
 func _accept(message: String) -> bool:

@@ -14,6 +14,7 @@ func _run() -> void:
 	mission.restart_scenario()
 	_check(not mission.identify_contact(), "one scan cannot identify target")
 	_check(mission.scan() and mission.scan() and mission.identify_contact(), "two valid scans allow confirmation")
+	_check(mission.assign_fire_control_target("contact.alpha"), "identified target can be assigned before range closure")
 	_check(not mission.fire_ship_gun("contact.alpha") and "射程" in mission.last_message, "out of range shot explains failure")
 	_check(world.set_ship_command(42.0, 22.0), "ship can close with target")
 	clock.advance(1000.0)

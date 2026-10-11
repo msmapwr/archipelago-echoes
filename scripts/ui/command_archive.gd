@@ -12,6 +12,7 @@ var selected_tab: int = 0
 var briefing_text: String = ""
 var progress_text: String = ""
 var history_text: String = ""
+var fire_control_text: String = ""
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -45,9 +46,9 @@ func _ready() -> void:
 	var tab_row := HBoxContainer.new()
 	tab_row.add_theme_constant_override("separation", 12)
 	column.add_child(tab_row)
-	for index in range(3):
+	for index in range(4):
 		var button := Button.new()
-		button.text = ["命令简报", "任务进度", "行动记录"][index]
+		button.text = ["命令简报", "任务进度", "行动记录", "火控命令"][index]
 		button.toggle_mode = true
 		button.pressed.connect(select_tab.bind(index))
 		tab_row.add_child(button)
@@ -75,18 +76,19 @@ func _label(parent: Node, text: String, font_size: int) -> Label:
 	parent.add_child(label)
 	return label
 
-func present(briefing: String, progress: String, history: String, paused_before: bool, ended: bool) -> void:
+func present(briefing: String, progress: String, history: String, paused_before: bool, ended: bool, fire_control: String = "") -> void:
 	briefing_text = briefing
 	progress_text = progress
 	history_text = history
+	fire_control_text = fire_control
 	status.text = "行动已结束；关闭后保持暂停。" if ended else "打开前已暂停；关闭后仍保持暂停。" if paused_before else "阅读期间模拟暂停；关闭后继续原来的时间倍率。"
 	select_tab(selected_tab)
 	show()
 	close_button.grab_focus()
 
 func select_tab(index: int) -> void:
-	selected_tab = clampi(index, 0, 2)
-	content.text = [briefing_text, progress_text, history_text][selected_tab]
+	selected_tab = clampi(index, 0, 3)
+	content.text = [briefing_text, progress_text, history_text, fire_control_text][selected_tab]
 	scroll.scroll_vertical = 0
 	for tab_index in range(tabs.size()):
 		tabs[tab_index].set_pressed_no_signal(tab_index == selected_tab)

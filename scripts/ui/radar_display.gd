@@ -33,6 +33,7 @@ var _echoes: Array[Dictionary] = []
 var display_range_km: float = MAX_RANGE_KM
 var gun_arc_visible: bool = false
 var gun_ready: bool = false
+var fire_control_assigned: bool = false
 var gun_range_km: float = 10.0
 var flight_navigation: bool = false
 var carrier_position_km: Vector2 = Vector2.ZERO
@@ -344,6 +345,9 @@ func _draw_contact(_center: Vector2, _radius: float) -> void:
 				_draw_unit_symbol(point, ship.visual_family_id, Color(tint, strength), NAN, ship.symbol_texture, ship.size_class, ship.shape_variant)
 	if contact_selected_state:
 		draw_arc(point, 17.0, 0.0, TAU, 40, AMBER, 1.5, true)
+	if fire_control_assigned and not flight_navigation:
+		draw_rect(Rect2(point - Vector2(27, 27), Vector2(54, 54)), Color(AMBER, strength), false, 1)
+		draw_string(ThemeDB.fallback_font, point + Vector2(30, 20), "GUN / A1", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(AMBER, strength))
 	# Neutral contact bracket; identity is not assumed before confirmation.
 	draw_line(point + Vector2(-19, -19), point + Vector2(-11, -19), Color(tint, strength))
 	draw_line(point + Vector2(-19, -19), point + Vector2(-19, -11), Color(tint, strength))

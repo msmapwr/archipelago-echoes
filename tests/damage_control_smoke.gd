@@ -20,6 +20,7 @@ func _run() -> void:
 	_check(not mission.start_damage_control() and mission.repair_teams == 1, "duplicate repair cannot consume resources")
 	mission.scan()
 	mission.identify_contact()
+	_check(mission.assign_fire_control_target("contact.alpha"), "repair can retain a target order without firing")
 	_check("损管" in mission.ship_gun_block_reason("contact.alpha"), "repair temporarily stops gun crew")
 	game.set_paused(true)
 	clock.advance(30.0)

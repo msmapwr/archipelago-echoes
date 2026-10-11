@@ -7,6 +7,13 @@ static func project(state: Dictionary) -> Dictionary:
 	var recovered: bool = state.get("recovered", false)
 	var observed: bool = state.get("scans", 0) > 0
 	var result := {"stage": "search", "title": "搜索接触", "next": "主动扫描海峡，寻找 A1。", "warning": "", "milestones": [observed, identified, state.get("launched", false), recovered, state.get("settled", false)], "can_land": false, "landing_reason": "", "return_seconds": 0.0}
+	result.fire_control_hint = ""
+	if mode == "bridge" and state.get("fire_control_enabled", false):
+		if state.get("fire_control_assigned", false):
+			var reason: String = state.get("fire_control_reason", "")
+			result.fire_control_hint = "甲板炮已指派 A1；可手动射击或撤销。" if reason.is_empty() else "甲板炮已指派 A1；" + reason + "。可排除阻塞或撤销。"
+		elif identified and state.get("enemy_alive", true):
+			result.fire_control_hint = "交战为可选操作：选择 A1 → 指派目标 → 甲板炮；指派不会自动开火。"
 	if mode == "campaign_failed":
 		result.stage = "failed"
 		result.title = "指挥官失联"

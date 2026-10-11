@@ -81,7 +81,7 @@ func _run() -> void:
 	_check(radar.display_range_km == 12.5 and not radar.contact_visible and mission.contact_visible, "near display clips distant echo without losing sensor report")
 	terminal.get_node("Footer/RadarRange").emit_signal("pressed")
 	_check(radar.display_range_km == 25.0 and radar.contact_visible, "search display restores distant contact")
-	_check("没有可射击" in details.get_node("GunStatus").text and radar.gun_arc_visible, "fire control states missing selection and displays gun arc")
+	_check("未指派" in details.get_node("GunStatus").text and radar.gun_arc_visible, "fire control states missing assignment and displays gun arc")
 	var world: Node = root.get_node("WorldState")
 	world.set_ship_command(42.0, 22.0)
 	clock.advance(1000.0)
@@ -90,6 +90,9 @@ func _run() -> void:
 	details.get_node("RadarActions/Identify").emit_signal("pressed")
 	click.position = radar._contact_position()
 	radar._gui_input(click)
+	_check(not radar.gun_ready and mission.fire_control_target_id.is_empty(), "selecting a confirmed target does not implicitly assign the gun")
+	main.assign_target_button.emit_signal("pressed")
+	_check(mission.fire_control_target_id == mission.CONTACT_ID, "assignment control commits the selected target")
 	_check(radar.gun_ready and "可开火" in details.get_node("GunStatus").text, "in-range forward contact produces a ready firing solution")
 	details.get_node("RadarActions/Fire").emit_signal("pressed")
 	await process_frame

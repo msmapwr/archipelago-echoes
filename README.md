@@ -45,6 +45,7 @@ godot --headless --path . --script res://tests/p0_smoke.gd
 godot --headless --path . --script res://tests/p1_world_smoke.gd
 godot --headless --path . --script res://tests/p1_navigation_smoke.gd
 godot --headless --path . --script res://tests/m1_mission_smoke.gd
+godot --headless --path . --script res://tests/p2_fire_control_smoke.gd
 godot --headless --path . --script res://tests/damage_control_smoke.gd
 godot --headless --path . --script res://tests/harbor_navigation_smoke.gd
 godot --headless --path . --script res://tests/radar_visual_smoke.gd
@@ -62,6 +63,8 @@ godot --path . --script res://tests/m1_ui_smoke.gd
 最后一项使用图形窗口检查嵌入主界面后的 CRT 鼠标输入。控制台分区与比例说明见 [UI 布局说明](docs/ui-shell.md)；规则、已验证分支和原型限制见 [M1 首关说明](docs/m1-vertical-slice.md)；版本变更见 [CHANGELOG](CHANGELOG.md)。
 
 ## 项目状态
+
+舰炮操作：扫描并确认 A1 → 点击雷达选择 → “指派目标 → 甲板炮” → 调整航向/距离 → 点击“甲板炮”单发射击；“撤销指派”停止指定该目标。取消查看选择不会撤销炮位指派；暂停可指派但不能开火。F1 的“火控命令”页可复盘命令与拒绝原因。详见 [P2.1 验收边界](docs/p2-fire-control.md)。
 
 单位图鉴：游戏中按 **F2**，或在编辑器运行 `scenes/unit_showcase.tscn`。可浏览六类舰艇与八类设施、三尺寸各十形态，缩放/灰度审查，并导出 PNG、SVG、结构 JSON 和全库图集到 Godot 用户目录 `icons`。图鉴关闭时保留原先的暂停状态。图标和后续拼装规格见 [单位图标规范](docs/unit-icon-spec.md)。
 
