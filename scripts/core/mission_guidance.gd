@@ -25,6 +25,8 @@ static func project(state: Dictionary) -> Dictionary:
 				result.fire_control_hint = "已命中但未穿透：尝试 AP；切换不重置装填，复测后再射击。"
 			elif impact.get("observed", false) and impact.get("armor_outcome", "") == "过穿":
 				result.fire_control_hint = "薄甲目标发生过穿：尝试 SAP 或 HE，等待装填后再射击。"
+			if state.has("fire_control_group"):
+				result.fire_control_hint = str(state.fire_control_group) + " / " + result.fire_control_hint
 		elif identified and state.get("enemy_alive", true):
 			result.fire_control_hint = "交战为可选操作：选择 A1 → 指派目标 → 甲板炮；指派不会自动开火。"
 	if mode == "campaign_failed":

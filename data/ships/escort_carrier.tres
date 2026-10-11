@@ -1,6 +1,20 @@
-[gd_resource type="Resource" script_class="ShipDefinition" load_steps=3 format=3]
+[gd_resource type="Resource" script_class="ShipDefinition" load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scripts/data/ship_definition.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/data/weapon_mount_definition.gd" id="2"]
+
+[sub_resource type="Resource" id="Fore"]
+script = ExtResource("2")
+mount_id = "fore"
+display_name = "前炮"
+local_position_km = Vector2(0, -0.03)
+
+[sub_resource type="Resource" id="Aft"]
+script = ExtResource("2")
+mount_id = "aft"
+display_name = "后炮"
+local_position_km = Vector2(0, 0.03)
+relative_heading_degrees = 180.0
 
 [resource]
 script = ExtResource("1")
@@ -9,6 +23,7 @@ display_name = "海岬号轻型航舰"
 max_speed_knots = 22.0
 aircraft_ids = PackedStringArray("aircraft.kestrel")
 weapon_ids = PackedStringArray("weapon.deck_gun")
+weapon_mounts = Array[ExtResource("2")]([SubResource("Fore"), SubResource("Aft")])
 ship_kind = "escort_carrier"
 symbol_id = "ship.haven"
 visual_family_id = "ship.escort_carrier"

@@ -27,11 +27,18 @@ var last_contact_range_km: float = 0.0
 var last_contact_seconds: float = 0.0
 var last_contact_heading_degrees: float = 0.0
 var fire_control_aim_mode: String = "observed"
-var selected_ammunition_id := "ammo.sap"
+var selected_mount_id := "fore"
+var _gun_states: Dictionary = {"fore": {"ammo": 6, "reload": 0.0, "ammunition": "ammo.sap", "heading": 0.0}}
+var _gun_mounts: Array[WeaponMountDefinition] = []
+var selected_ammunition_id: String:
+	get: return _gun_states[selected_mount_id].ammunition
+	set(value): _gun_states[selected_mount_id].ammunition = value
 const LOCK_MEMORY_SECONDS := 8.0
 const TURRET_RATE_DEGREES := 20.0
 var fire_control_locked := false
-var turret_heading_degrees := 0.0
+var turret_heading_degrees: float:
+	get: return wrapf(WorldState.ship_heading_degrees + float(_gun_states[selected_mount_id].heading), 0, 360)
+	set(value): _gun_states[selected_mount_id].heading = wrapf(value - WorldState.ship_heading_degrees, -180, 180)
 var lock_status := "未锁定"
 var _motion = preload("res://scripts/core/fire_control_solution.gd").new()
 var fire_control_correction_km := Vector2.ZERO
@@ -43,8 +50,13 @@ const GUN_HIT_RADIUS_KM := 0.05
 const GUN_NEAR_MISS_RADIUS_KM := 0.3
 
 var ship_health: float = 100.0
-var ship_ammo: int = 6
-var next_ship_fire_seconds: float = 0.0
+# Compatibility properties project the selected group; default remains the fore gun.
+var ship_ammo: int:
+	get: return _gun_states[selected_mount_id].ammo
+	set(value): _gun_states[selected_mount_id].ammo = value
+var next_ship_fire_seconds: float:
+	get: return _gun_states[selected_mount_id].reload
+	set(value): _gun_states[selected_mount_id].reload = value
 var fire_control_target_id: String = ""
 var fire_control_order_id: String = ""
 var _fire_control_sequence: int = 0
@@ -93,6 +105,13 @@ func restart_scenario() -> void:
 	scan()
 
 func _initialize_scenario() -> void:
+	var ship := DataManager.get_definition(SHIP_ID) as ShipDefinition
+	_gun_mounts = ship.weapon_mounts.duplicate()
+	if _gun_mounts.is_empty(): _gun_mounts.append(WeaponMountDefinition.new())
+	_gun_states.clear()
+	for mount in _gun_mounts:
+		_gun_states[mount.mount_id] = {"ammo": mount.capacity, "reload": 0.0, "ammunition": "ammo.sap", "heading": mount.relative_heading_degrees}
+	selected_mount_id = _gun_mounts[0].mount_id
 	radar_emitting = true
 	contact_visible = false
 	contact_scan_count = 0
@@ -113,8 +132,6 @@ func _initialize_scenario() -> void:
 	_shot_sequence = 0
 	_last_tick_ship_position = WorldState.ship_position_km
 	ship_health = 100.0
-	ship_ammo = 6
-	next_ship_fire_seconds = 0.0
 	fire_control_target_id = ""
 	fire_control_order_id = ""
 	_fire_control_sequence = 0
@@ -250,7 +267,7 @@ func assign_fire_control_target(contact_id: String) -> bool:
 	fire_control_target_id = contact_id
 	fire_control_order_id = "fire_control.%03d" % _fire_control_sequence
 	fire_control_correction_km = Vector2.ZERO
-	EventBus.record("fire_control_assigned", {"weapon_id": "weapon.deck_gun", "target_id": contact_id, "order_id": fire_control_order_id, "observation_seconds": last_contact_seconds, "queued": get_tree().paused})
+	EventBus.record("fire_control_assigned", {"weapon_id": active_gun_mount().weapon_id, "target_id": contact_id, "order_id": fire_control_order_id, "observation_seconds": last_contact_seconds, "queued": get_tree().paused})
 	EventBus.command_issued.emit(fire_control_order_id)
 	state_changed.emit()
 	return _accept("甲板炮目标已指派 A1；继续模拟后可手动射击" if get_tree().paused else "甲板炮目标已指派 A1；查看火控条件后手动射击")
@@ -283,7 +300,7 @@ func _clear_fire_control(reason: String, simulation_seconds: float = -1.0) -> vo
 	fire_control_target_id = ""
 	fire_control_order_id = ""
 	fire_control_correction_km = Vector2.ZERO
-	EventBus.record("fire_control_cleared", {"weapon_id": "weapon.deck_gun", "target_id": target, "order_id": order, "reason": reason}, simulation_seconds)
+	EventBus.record("fire_control_cleared", {"weapon_id": active_gun_mount().weapon_id, "target_id": target, "order_id": order, "reason": reason}, simulation_seconds)
 	EventBus.command_issued.emit(order + ".clear")
 
 func _on_fire_control_mode_changed(_previous: String, current: String) -> void:
@@ -296,7 +313,7 @@ func _on_fire_control_mode_changed(_previous: String, current: String) -> void:
 
 func _cancel_gun_projectiles(reason: String) -> void:
 	for projectile in projectiles:
-		EventBus.record("gun_projectile_cancelled", {"shot_id": projectile.shot_id, "order_id": projectile.order_id, "reason": reason})
+		EventBus.record("gun_projectile_cancelled", {"shot_id": projectile.shot_id, "order_id": projectile.order_id, "mount_id": projectile.mount_id, "reason": reason})
 	projectiles.clear()
 
 func fire_ship_gun(contact_id: String = "") -> bool:
@@ -304,29 +321,64 @@ func fire_ship_gun(contact_id: String = "") -> bool:
 	var target := fire_control_target_id if contact_id.is_empty() else contact_id
 	var reason := ship_gun_block_reason(target)
 	if not reason.is_empty():
-		EventBus.record("ship_gun_rejected", {"weapon_id": "weapon.deck_gun", "target_id": target, "order_id": fire_control_order_id, "reason": reason})
+		EventBus.record("ship_gun_rejected", {"weapon_id": active_gun_mount().weapon_id, "target_id": target, "order_id": fire_control_order_id, "mount_id": selected_mount_id, "reason": reason})
 		return _reject(reason)
 	var solution := fire_control_solution()
 	var aim: Vector2 = solution.aim_position_km if fire_control_aim_mode == "lead" else last_contact_position_km
 	aim += fire_control_correction_km
-	var weapon: WeaponDefinition = DataManager.get_definition("weapon.deck_gun") as WeaponDefinition
-	var flight_seconds := maxf(0.1, WorldState.ship_position_km.distance_to(aim) / weapon.projectile_speed_km_per_second)
+	var weapon: WeaponDefinition = DataManager.get_definition(active_gun_mount().weapon_id) as WeaponDefinition
+	var flight_seconds := maxf(0.1, gun_origin_km().distance_to(aim) / weapon.projectile_speed_km_per_second)
 	var ammunition := DataManager.get_definition(selected_ammunition_id) as AmmunitionDefinition
 	_shot_sequence += 1
 	var shot := {"shot_id": "deck_gun.%03d" % _shot_sequence, "order_id": fire_control_order_id, "target_id": target,
-		"origin_km": WorldState.ship_position_km, "aim_position_km": aim, "aim_mode": fire_control_aim_mode,
+		"origin_km": gun_origin_km(), "mount_id": selected_mount_id, "aim_position_km": aim, "aim_mode": fire_control_aim_mode,
 		"correction_km": fire_control_correction_km, "locked": fire_control_locked, "turret_heading_degrees": turret_heading_degrees, "fired_seconds": WorldClock.elapsed_seconds,
 		"impact_seconds": WorldClock.elapsed_seconds + flight_seconds, "flight_seconds": flight_seconds, "ammunition": ammunition.snapshot()}
 	projectiles.append(shot.duplicate(true))
 	projectiles.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.impact_seconds < b.impact_seconds)
 	ship_ammo -= 1
-	next_ship_fire_seconds = WorldClock.elapsed_seconds + 30.0
+	next_ship_fire_seconds = WorldClock.elapsed_seconds + active_gun_mount().reload_seconds
 	enemy_alert_until_seconds = maxf(enemy_alert_until_seconds, WorldClock.elapsed_seconds + TRACK_MEMORY_SECONDS)
-	EventBus.weapon_fired.emit("weapon.deck_gun")
-	shot.merge({"weapon_id": "weapon.deck_gun", "observation_seconds": last_contact_seconds, "solution": solution.duplicate(true), "ammo_remaining": ship_ammo})
+	EventBus.weapon_fired.emit(active_gun_mount().weapon_id)
+	shot.merge({"weapon_id": active_gun_mount().weapon_id, "observation_seconds": last_contact_seconds, "solution": solution.duplicate(true), "ammo_remaining": ship_ammo})
 	EventBus.record("weapon_fired", shot)
 	state_changed.emit()
 	return _accept("甲板炮已发射 / %s · 预计 %.1f 秒后弹着" % [shot.shot_id, flight_seconds])
+
+func active_gun_mount() -> WeaponMountDefinition:
+	for mount in _gun_mounts:
+		if mount.mount_id == selected_mount_id: return mount
+	return null
+
+func gun_origin_km() -> Vector2:
+	return WorldState.ship_position_km + active_gun_mount().local_position_km.rotated(deg_to_rad(WorldState.ship_heading_degrees))
+
+func gun_center_heading_degrees() -> float:
+	return wrapf(WorldState.ship_heading_degrees + active_gun_mount().relative_heading_degrees, 0, 360)
+
+func gun_groups() -> Array[Dictionary]:
+	var groups: Array[Dictionary] = []
+	for mount in _gun_mounts:
+		groups.append({"mount_id": mount.mount_id, "label": mount.display_name, "origin_km": WorldState.ship_position_km + mount.local_position_km.rotated(deg_to_rad(WorldState.ship_heading_degrees)), "heading": wrapf(WorldState.ship_heading_degrees + mount.relative_heading_degrees, 0, 360), "half_arc": mount.half_arc_degrees, "range_km": (DataManager.get_definition(mount.weapon_id) as WeaponDefinition).range_km, "ammo": _gun_states[mount.mount_id].ammo, "reload_remaining": maxf(0, _gun_states[mount.mount_id].reload - WorldClock.elapsed_seconds), "ammunition_id": _gun_states[mount.mount_id].ammunition})
+	return groups
+
+func total_ship_ammo() -> int:
+	var total := 0
+	for group in _gun_states.values(): total += int(group.ammo)
+	return total
+
+func select_gun_group(mount_id: String) -> bool:
+	if not _gun_states.has(mount_id) or GameManager.mode != "bridge" or not GameManager.ship_afloat or not GameManager.player_alive:
+		EventBus.record("fire_control_rejected", {"action": "group", "order_id": fire_control_order_id, "reason": "炮组无效或无舰桥指挥权"})
+		return _reject("炮组无效或无舰桥指挥权")
+	if selected_mount_id == mount_id: return true
+	_release_fire_control_lock("切换炮组")
+	selected_mount_id = mount_id
+	lock_status = "未锁定"
+	EventBus.record("fire_control_group_selected", {"mount_id": mount_id, "order_id": fire_control_order_id, "queued": get_tree().paused})
+	EventBus.command_issued.emit("deck_gun.group." + mount_id)
+	state_changed.emit()
+	return _accept("%s已选中；独立弹药与装填，保持 A1 指派，需重新照射" % active_gun_mount().display_name)
 
 func ship_gun_block_reason(contact_id: String = "") -> String:
 	if not GameManager.player_alive or GameManager.mode != "bridge" or not GameManager.ship_afloat:
@@ -349,7 +401,7 @@ func ship_gun_block_reason(contact_id: String = "") -> String:
 		return "甲板炮弹药耗尽"
 	if WorldClock.elapsed_seconds < next_ship_fire_seconds:
 		return "甲板炮装填中：还需 %.0f 秒" % ceilf(next_ship_fire_seconds - WorldClock.elapsed_seconds)
-	var weapon: WeaponDefinition = DataManager.get_definition("weapon.deck_gun") as WeaponDefinition
+	var weapon: WeaponDefinition = DataManager.get_definition(active_gun_mount().weapon_id) as WeaponDefinition
 	if WorldClock.elapsed_seconds - last_contact_seconds > 45.0:
 		return "接触情报已过期，请重新扫描"
 	var aim := last_contact_position_km
@@ -361,19 +413,19 @@ func ship_gun_block_reason(contact_id: String = "") -> String:
 	aim += fire_control_correction_km
 	if weapon == null or not is_finite(weapon.projectile_speed_km_per_second) or weapon.projectile_speed_km_per_second <= 0:
 		return "甲板炮弹道参数无效"
-	if weapon == null or WorldState.ship_position_km.distance_to(aim) > weapon.range_km:
+	if weapon == null or gun_origin_km().distance_to(aim) > weapon.range_km:
 		return "提前量瞄准点超出甲板炮射程" if fire_control_aim_mode == "lead" else "最后观测目标超出甲板炮射程"
-	var relative := aim - WorldState.ship_position_km
+	var relative := aim - gun_origin_km()
 	var bearing := rad_to_deg(atan2(relative.x, -relative.y))
-	var bearing_error := absf(wrapf(bearing - WorldState.ship_heading_degrees, -180.0, 180.0))
-	if bearing_error > GUN_HALF_ARC_DEGREES:
-		return "目标在甲板炮射界外：调整舰艏朝向 A1"
+	var bearing_error := absf(wrapf(bearing - gun_center_heading_degrees(), -180.0, 180.0))
+	if bearing_error > active_gun_mount().half_arc_degrees:
+		return "目标在%s射界外：转向使该炮位朝向 A1" % active_gun_mount().display_name
 	if fire_control_locked:
 		var lock_reason := fire_control_lock_reason()
 		if not lock_reason.is_empty(): return lock_reason
 		if absf(wrapf(bearing - turret_heading_degrees, -180.0, 180.0)) > 2.0:
 			return "炮塔跟踪中：等待炮口对准"
-	if not WorldState.map.can_navigate_segment(WorldState.ship_position_km, aim):
+	if not WorldState.map.can_navigate_segment(gun_origin_km(), aim):
 		return "岛屿遮挡射线"
 	return ""
 
@@ -397,7 +449,7 @@ func set_fire_control_lock(enabled: bool) -> bool:
 	if enabled:
 		fire_control_locked = true
 		lock_status = "持续照射"
-		EventBus.record("fire_control_locked", {"order_id": fire_control_order_id, "target_id": fire_control_target_id, "queued": get_tree().paused})
+		EventBus.record("fire_control_locked", {"order_id": fire_control_order_id, "mount_id": selected_mount_id, "target_id": fire_control_target_id, "queued": get_tree().paused})
 	else:
 		_release_fire_control_lock("手动解除")
 	EventBus.command_issued.emit(fire_control_order_id + ".lock")
@@ -408,7 +460,7 @@ func _release_fire_control_lock(reason: String, simulation_seconds: float = -1.0
 	if not fire_control_locked: return
 	fire_control_locked = false
 	lock_status = "失锁 / " + reason
-	EventBus.record("fire_control_lock_lost", {"order_id": fire_control_order_id, "target_id": fire_control_target_id, "reason": reason}, simulation_seconds)
+	EventBus.record("fire_control_lock_lost", {"order_id": fire_control_order_id, "mount_id": selected_mount_id, "target_id": fire_control_target_id, "reason": reason}, simulation_seconds)
 
 func _advance_fire_control_lock(delta: float) -> void:
 	if not fire_control_locked: return
@@ -424,12 +476,12 @@ func _advance_fire_control_lock(delta: float) -> void:
 			return
 		aim = solution.aim_position_km
 	aim += fire_control_correction_km
-	var relative := aim - WorldState.ship_position_km
+	var relative := aim - gun_origin_km()
 	var bearing := rad_to_deg(atan2(relative.x, -relative.y))
-	bearing = WorldState.ship_heading_degrees + clampf(wrapf(bearing - WorldState.ship_heading_degrees, -180, 180), -GUN_HALF_ARC_DEGREES, GUN_HALF_ARC_DEGREES)
+	bearing = gun_center_heading_degrees() + clampf(wrapf(bearing - gun_center_heading_degrees(), -180, 180), -active_gun_mount().half_arc_degrees, active_gun_mount().half_arc_degrees)
 	var error := wrapf(bearing - turret_heading_degrees, -180.0, 180.0)
 	turret_heading_degrees = wrapf(turret_heading_degrees + clampf(error, -TURRET_RATE_DEGREES * delta, TURRET_RATE_DEGREES * delta), 0, 360)
-	turret_heading_degrees = wrapf(WorldState.ship_heading_degrees + clampf(wrapf(turret_heading_degrees - WorldState.ship_heading_degrees, -180, 180), -GUN_HALF_ARC_DEGREES, GUN_HALF_ARC_DEGREES), 0, 360)
+	turret_heading_degrees = wrapf(gun_center_heading_degrees() + clampf(wrapf(turret_heading_degrees - gun_center_heading_degrees(), -180, 180), -active_gun_mount().half_arc_degrees, active_gun_mount().half_arc_degrees), 0, 360)
 	lock_status = "照射 / 已对准" if absf(wrapf(bearing - turret_heading_degrees, -180, 180)) <= 2 else "照射 / 炮塔跟踪"
 
 func set_fire_control_aim_mode(value: String) -> bool:
@@ -439,7 +491,7 @@ func set_fire_control_aim_mode(value: String) -> bool:
 	if value == fire_control_aim_mode:
 		return true
 	fire_control_aim_mode = value
-	EventBus.record("fire_control_aim_mode_changed", {"aim_mode": value, "weapon_id": "weapon.deck_gun", "target_id": fire_control_target_id, "order_id": fire_control_order_id, "queued": get_tree().paused})
+	EventBus.record("fire_control_aim_mode_changed", {"aim_mode": value, "weapon_id": active_gun_mount().weapon_id, "target_id": fire_control_target_id, "order_id": fire_control_order_id, "queued": get_tree().paused})
 	EventBus.command_issued.emit("deck_gun.aim." + value)
 	state_changed.emit()
 	return _accept(("提前量瞄准：运动解算已就绪" if fire_control_solution().valid else "提前量瞄准：等待有效运动解算") if value == "lead" else "最后观测瞄准：不补偿目标运动")
@@ -450,7 +502,7 @@ func set_ammunition(ammunition_id: String) -> bool:
 		return _reject("弹种无效或无舰桥指挥权")
 	if ammunition_id == selected_ammunition_id: return true
 	selected_ammunition_id = ammunition_id
-	EventBus.record("fire_control_ammunition_changed", {"ammunition_id": ammunition_id, "order_id": fire_control_order_id, "queued": get_tree().paused})
+	EventBus.record("fire_control_ammunition_changed", {"ammunition_id": ammunition_id, "mount_id": selected_mount_id, "order_id": fire_control_order_id, "queued": get_tree().paused})
 	EventBus.command_issued.emit("deck_gun.ammunition." + ammunition_id)
 	state_changed.emit()
 	return _accept("下一发使用 %s；换弹不刷新装填，不改变已发射炮弹" % (DataManager.get_definition(ammunition_id).display_name))
@@ -463,8 +515,8 @@ func enemy_armor_mm() -> float:
 func fire_control_solution() -> Dictionary:
 	if not radar_emitting or not contact_visible or not enemy_alive or not GameManager.ship_afloat or not GameManager.player_alive or GameManager.mode in ["settlement", "campaign_failed"] or not GameManager.target_identified:
 		return {"valid": false, "reason": "运动解算不可用：需要已识别的有效雷达接触"}
-	var weapon: WeaponDefinition = DataManager.get_definition("weapon.deck_gun") as WeaponDefinition
-	return _motion.solve(WorldState.ship_position_km, WorldClock.elapsed_seconds, weapon.projectile_speed_km_per_second if weapon != null else 0.0)
+	var weapon: WeaponDefinition = DataManager.get_definition(active_gun_mount().weapon_id) as WeaponDefinition
+	return _motion.solve(gun_origin_km(), WorldClock.elapsed_seconds, weapon.projectile_speed_km_per_second if weapon != null else 0.0)
 
 func adjust_fire_control_correction(direction: String) -> bool:
 	if GameManager.mode != "bridge" or not GameManager.player_alive or not GameManager.ship_afloat or fire_control_target_id.is_empty() or direction not in ["left", "right", "short", "long", "reset"]:
@@ -496,7 +548,7 @@ func _advance_gun_projectiles(delta: float, total_seconds: float, observer_origi
 		var error := impact_position - WorldState.contact_position_km
 		var hit := enemy_alive and error.length() <= GUN_HIT_RADIUS_KM
 		var result := "hit" if hit else "near_miss" if enemy_alive and error.length() <= GUN_NEAR_MISS_RADIUS_KM else "miss"
-		last_gun_impact = {"shot_id": shot.shot_id, "order_id": shot.order_id, "aim_position_km": shot.aim_position_km, "impact_seconds": cursor, "observed": observed, "result": result if observed else "unobserved"}
+		last_gun_impact = {"shot_id": shot.shot_id, "order_id": shot.order_id, "mount_id": shot.mount_id, "aim_position_km": shot.aim_position_km, "impact_seconds": cursor, "observed": observed, "result": result if observed else "unobserved"}
 		if observed:
 			last_gun_impact.error_km = error
 			last_gun_impact.error_meters = error.length() * 1000

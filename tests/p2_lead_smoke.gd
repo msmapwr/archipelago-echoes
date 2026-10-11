@@ -89,8 +89,8 @@ func controller_lifecycle() -> void:
 	check(mission.set_fire_control_aim_mode("lead"), "ready lead mode selected")
 	var weapon: Resource = root.get_node("DataManager").get_definition("weapon.deck_gun")
 	var original_range: float = weapon.range_km
-	var observed_range: float = world.ship_position_km.distance_to(mission.last_contact_position_km)
-	var lead_range: float = world.ship_position_km.distance_to(s.aim_position_km)
+	var observed_range: float = mission.gun_origin_km().distance_to(mission.last_contact_position_km)
+	var lead_range: float = mission.gun_origin_km().distance_to(s.aim_position_km)
 	weapon.range_km = (observed_range + lead_range) * 0.5
 	var lead_blocked: bool = not mission.ship_gun_block_reason().is_empty()
 	mission.set_fire_control_aim_mode("observed")

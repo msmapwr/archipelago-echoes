@@ -218,7 +218,7 @@ func _refresh_status() -> void:
 			get_tree().paused = true
 		top_message.text = "CIC  /  指挥链路已建立     ·     作战情报中心在线"
 		time_value.text = WorldClock.formatted_time()
-		ammo_value.text = "甲板炮 %02d/06   ·   对海弹 %01d/01" % [MissionController.ship_ammo, MissionController.aircraft_bombs]
+		ammo_value.text = "%s %02d/%02d · 舰炮总余 %02d · 对海弹 %01d" % [MissionController.active_gun_mount().display_name, MissionController.ship_ammo, MissionController.active_gun_mount().capacity, MissionController.total_ship_ammo(), MissionController.aircraft_bombs]
 		mode_value.text = "MODE  /  %s" % GameManager.mode.to_upper()
 		hull_value.text = "HULL   %03.0f%%" % MissionController.ship_health
 		aux_status.text = "CIC   /   LIVE\nRADAR /   %s\nLINK  /   STABLE" % ("ACTIVE" if MissionController.radar_emitting else "SILENT")

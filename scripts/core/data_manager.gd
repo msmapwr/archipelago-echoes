@@ -56,6 +56,15 @@ func validate_catalog() -> bool:
 				_require_reference(definition.id, aircraft_id, AircraftDefinition)
 			for weapon_id in definition.weapon_ids:
 				_require_reference(definition.id, weapon_id, WeaponDefinition)
+			var mount_ids: PackedStringArray = []
+			for mount in definition.weapon_mounts:
+				if mount == null:
+					errors.append("%s: null weapon mount" % definition.id)
+					continue
+				_require_reference(definition.id, mount.weapon_id, WeaponDefinition)
+				if mount.mount_id.is_empty() or mount.mount_id in mount_ids or mount.display_name.is_empty() or mount.capacity <= 0 or not is_finite(mount.reload_seconds) or mount.reload_seconds <= 0 or not mount.local_position_km.is_finite() or not is_finite(mount.relative_heading_degrees) or not is_finite(mount.half_arc_degrees) or mount.half_arc_degrees <= 0 or mount.half_arc_degrees > 180:
+					errors.append("%s: invalid or duplicate weapon mount" % definition.id)
+				mount_ids.append(mount.mount_id)
 		elif definition is TaskDefinition:
 			_require_reference(definition.id, definition.ship_id, ShipDefinition)
 			_require_reference(definition.id, definition.aircraft_id, AircraftDefinition)

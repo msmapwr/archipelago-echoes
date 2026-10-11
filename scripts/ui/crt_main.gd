@@ -39,6 +39,7 @@ var aim_mode_button: Button
 var lock_button: Button
 var aim_controls: HBoxContainer
 var ammunition_selector: OptionButton
+var gun_group_selector: OptionButton
 var correction_controls: HBoxContainer
 var _next_auto_scan_seconds: float = 30.0
 var _displayed_second: int = -1
@@ -121,6 +122,13 @@ func _build_fire_control_ui() -> void:
 	lock_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	lock_button.pressed.connect(func() -> void: MissionController.set_fire_control_lock(not MissionController.fire_control_locked))
 	aim_controls.add_child(lock_button)
+	gun_group_selector = OptionButton.new()
+	gun_group_selector.name = "GunGroup"
+	gun_group_selector.custom_minimum_size.y = 38
+	for group in MissionController.gun_groups(): gun_group_selector.add_item(group.label)
+	gun_group_selector.item_selected.connect(func(index: int) -> void: MissionController.select_gun_group(MissionController.gun_groups()[index].mount_id))
+	aim_controls.add_child(gun_group_selector)
+	aim_controls.move_child(gun_group_selector, 0)
 	correction_controls = HBoxContainer.new()
 	correction_controls.name = "CorrectionControls"
 	details.add_child(correction_controls)
@@ -247,6 +255,7 @@ func guidance_state() -> Dictionary:
 	state.fire_control_locked = MissionController.fire_control_locked
 	state.fire_control_lock_status = MissionController.lock_status
 	state.fire_control_ammunition = MissionController.selected_ammunition_id
+	state.fire_control_group = MissionController.active_gun_mount().display_name
 	state.fire_control_impact = MissionController.last_gun_impact if MissionController.last_gun_impact.get("order_id", "") == MissionController.fire_control_order_id else {}
 	state.enemy_alive = MissionController.enemy_alive
 	return state
@@ -297,7 +306,7 @@ func _archive_progress() -> String:
 	var names := ["取得雷达观测", "确认指定接触", "飞机实际升空", "指挥官安全回收", "提交任务报告"]
 	for index in range(names.size()):
 		lines.append("%s  %s" % ["[已完成]" if guidance.milestones[index] else "[待完成]", names[index]])
-	lines.append("\n舰体 %.0f%% · 甲板炮余弹 %d · 出击 %d 次\n回收地点 / %s\n模拟耗时 / %s · 海域种子 / %d" % [MissionController.ship_health, MissionController.ship_ammo, MissionController.sorties_launched, {"ship": "母舰", "friendly_airfield": "友方机场", "rescue": "救援"}.get(GameManager.recovery_site, "尚未回收"), WorldClock.formatted_time(), WorldState.scenario_seed])
+	lines.append("\n舰体 %.0f%% · 舰炮总余弹 %d · 出击 %d 次\n回收地点 / %s\n模拟耗时 / %s · 海域种子 / %d" % [MissionController.ship_health, MissionController.total_ship_ammo(), MissionController.sorties_launched, {"ship": "母舰", "friendly_airfield": "友方机场", "rescue": "救援"}.get(GameManager.recovery_site, "尚未回收"), WorldClock.formatted_time(), WorldState.scenario_seed])
 	if not guidance.warning.is_empty():
 		lines.append("\n" + guidance.warning)
 	if MissionController.aircraft_airborne:
@@ -322,6 +331,8 @@ func _archive_fire_control(reason_before_open: String) -> String:
 	lines.insert(3, _motion_description(solution))
 	lines.insert(4, "照射 / " + MissionController.lock_status)
 	lines.insert(5, "下一发 / " + DataManager.get_definition(MissionController.selected_ammunition_id).display_name)
+	for group in MissionController.gun_groups():
+		lines.insert(6, "%s / 余弹 %d · 装填 %.0f 秒 · %s" % [group.label, group.ammo, group.reload_remaining, str(group.ammunition_id).trim_prefix("ammo.").to_upper()])
 	var entries: PackedStringArray = []
 	for event in EventBus.history:
 		var kind: String = event.get("kind", "")
@@ -337,6 +348,12 @@ func _archive_fire_control(reason_before_open: String) -> String:
 	return "\n".join(lines)
 
 func _input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode in [KEY_1, KEY_2] and GameManager.mode == "bridge" and not archive.visible and not unit_library.visible:
+		var index := 0 if event.keycode == KEY_1 else 1
+		var groups := MissionController.gun_groups()
+		if index < groups.size(): MissionController.select_gun_group(groups[index].mount_id)
+		get_viewport().set_input_as_handled()
+		return
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F2:
 		toggle_unit_library()
 		get_viewport().set_input_as_handled()
@@ -592,6 +609,13 @@ func _refresh_sortie_configuration() -> void:
 
 func _refresh_gun_status() -> void:
 	var reason := MissionController.ship_gun_block_reason()
+	var mount := MissionController.active_gun_mount()
+	var groups := MissionController.gun_groups()
+	for index in range(groups.size()):
+		if groups[index].mount_id == MissionController.selected_mount_id: gun_group_selector.select(index)
+	gun_group_selector.disabled = not GameManager.player_alive or not GameManager.ship_afloat
+	gun_group_selector.tooltip_text = "1 / 2 切换炮组。两组共用 A1 指派；切换不刷新装填，解除当前照射。"
+	for group in groups: gun_group_selector.tooltip_text += "\n%s：余弹 %d · 装填 %.0f 秒" % [group.label, group.ammo, group.reload_remaining]
 	fire_control_actions.visible = GameManager.mode == "bridge"
 	ammunition_selector.select(["ammo.ap", "ammo.sap", "ammo.he"].find(MissionController.selected_ammunition_id))
 	ammunition_selector.disabled = not GameManager.player_alive or not GameManager.ship_afloat
@@ -613,14 +637,15 @@ func _refresh_gun_status() -> void:
 	assign_target_button.disabled = not assignment_reason.is_empty() or not MissionController.fire_control_target_id.is_empty()
 	assign_target_button.tooltip_text = assignment_reason if not assignment_reason.is_empty() else "仅建立目标指派；暂停时可排队，不会自动射击"
 	clear_target_button.disabled = MissionController.fire_control_target_id.is_empty() or GameManager.mode != "bridge"
-	var weapon: WeaponDefinition = DataManager.get_definition("weapon.deck_gun") as WeaponDefinition
+	var weapon: WeaponDefinition = DataManager.get_definition(mount.weapon_id) as WeaponDefinition
 	var weapon_range := weapon.range_km if weapon != null else 0.0
-	gun_status.text = "火控 / %s" % ("可开火 · %.0f km / 前向 ±%.0f°" % [weapon_range, MissionController.GUN_HALF_ARC_DEGREES] if reason.is_empty() else reason)
-	gun_status.text = ("甲板炮 → A1 / " + MissionController.fire_control_order_id if not MissionController.fire_control_target_id.is_empty() else "甲板炮 / 未指派") + " · " + MissionController.selected_ammunition_id.trim_prefix("ammo.").to_upper() + "\n" + gun_status.text
+	gun_status.text = "火控 / %s" % ("可开火 · %.0f km / ±%.0f°" % [weapon_range, mount.half_arc_degrees] if reason.is_empty() else reason)
+	gun_status.text = mount.display_name + (" → A1 / " + MissionController.fire_control_order_id if not MissionController.fire_control_target_id.is_empty() else " / 未指派") + " · " + MissionController.selected_ammunition_id.trim_prefix("ammo.").to_upper() + "\n" + gun_status.text
 	gun_status.text += "\n" + (MissionController.lock_status + " · " if MissionController.fire_control_locked or MissionController.lock_status.begins_with("失锁") else "") + _motion_description(solution)
 	gun_status.text += "\n修正 %.0f m · %s" % [MissionController.fire_control_correction_km.length() * 1000, "炮弹飞行中 / %.1f 秒" % maxf(0, MissionController.projectiles[0].impact_seconds - WorldClock.elapsed_seconds) if not MissionController.projectiles.is_empty() else _impact_description(MissionController.last_gun_impact)]
 	gun_status.add_theme_color_override("font_color", Color("#83e8aa") if reason.is_empty() else Color("#e8b968"))
-	_button("RadarActions/Fire").tooltip_text = "甲板炮 %.0f km / 舰艏两侧各 %.0f°\n%s" % [weapon_range, MissionController.GUN_HALF_ARC_DEGREES, "可开火" if reason.is_empty() else reason]
+	_button("RadarActions/Fire").text = "甲板炮·" + mount.display_name
+	_button("RadarActions/Fire").tooltip_text = "%s %.0f km / 基准 %03d° ±%.0f°\n余弹 %d · %s" % [mount.display_name, weapon_range, MissionController.gun_center_heading_degrees(), mount.half_arc_degrees, MissionController.ship_ammo, "可开火" if reason.is_empty() else reason]
 	radar.set_gun_solution(GameManager.mode == "bridge", reason.is_empty(), weapon_range)
 	radar.fire_control_assigned = not MissionController.fire_control_target_id.is_empty()
 	var prediction := solution.duplicate(true)
@@ -670,7 +695,7 @@ func _refresh_contact() -> void:
 	selection_details.text = "雷达静默 · 开机后可复测接触" if not MissionController.radar_emitting else ("已选择 A1 · 确认身份后可指派甲板炮目标" if selected_contact_id == MissionController.CONTACT_ID else "未选择接触 · 点击雷达回波")
 
 func _refresh_ship() -> void:
-	ship_details.text = "航向 %03d°   航速 %.0f / %.0f kn   舰体 %.0f%%\n位置 E %05.1f / S %05.1f km   弹药 %d" % [roundi(WorldState.ship_heading_degrees), WorldState.ship_speed_knots, WorldState.ship_max_speed_knots, MissionController.ship_health, WorldState.ship_position_km.x, WorldState.ship_position_km.y, MissionController.ship_ammo]
+	ship_details.text = "航向 %03d°   航速 %.0f / %.0f kn   舰体 %.0f%%\n位置 E %05.1f / S %05.1f km   弹药 %d" % [roundi(WorldState.ship_heading_degrees), WorldState.ship_speed_knots, WorldState.ship_max_speed_knots, MissionController.ship_health, WorldState.ship_position_km.x, WorldState.ship_position_km.y, MissionController.total_ship_ammo()]
 	radar.set_ship_heading(WorldState.ship_heading_degrees)
 	var repairing := MissionController.repair_seconds_remaining > 0.0
 	ship_controls.get_node("DamageControl").visible = MissionController.ship_health < 100.0 or repairing
@@ -699,7 +724,7 @@ func _refresh_flight() -> void:
 func _refresh_debrief() -> void:
 	var outcome := "任务完成" if GameManager.mode == "settlement" else "战役失败"
 	var recovery := "母舰" if GameManager.recovery_site == "ship" else ("友方机场" if GameManager.recovery_site == "friendly_airfield" else "未回收")
-	debrief_details.text = "结果 ........ %s\n任务目标 .... %s\n指挥官 ...... %s\n母舰舰体 .... %.0f%%\n敌舰舰体 .... %.0f%%\n甲板炮余弹 .. %d\n模拟耗时 .... %s" % [outcome, "已确认" if GameManager.target_identified else "未确认", recovery, MissionController.ship_health, MissionController.enemy_health, MissionController.ship_ammo, WorldClock.formatted_time()]
+	debrief_details.text = "结果 ........ %s\n任务目标 .... %s\n指挥官 ...... %s\n母舰舰体 .... %.0f%%\n敌舰舰体 .... %.0f%%\n甲板炮余弹 .. %d\n模拟耗时 .... %s" % [outcome, "已确认" if GameManager.target_identified else "未确认", recovery, MissionController.ship_health, MissionController.enemy_health, MissionController.total_ship_ammo(), WorldClock.formatted_time()]
 
 func _refresh_radar() -> void:
 	if WorldState.map == null:
@@ -725,16 +750,17 @@ func _on_event_recorded(_event: Dictionary) -> void:
 func _event_line(event: Dictionary) -> String:
 	var details_data: Dictionary = event.get("details", {})
 	match event.get("kind", ""):
-		"fire_control_ammunition_changed": return "下一发换弹 / %s · %s" % [str(details_data.get("ammunition_id", "")).trim_prefix("ammo.").to_upper(), details_data.get("order_id", "")]
-		"fire_control_locked": return "锁定照射 / " + str(details_data.get("order_id", ""))
-		"fire_control_lock_lost": return "照射终止 / %s · %s" % [details_data.get("order_id", ""), details_data.get("reason", "")]
-		"gun_projectile_impact": return "甲板炮弹着 / %s · %s · %s" % [details_data.get("shot_id", ""), details_data.get("order_id", ""), _impact_description(details_data)]
+		"fire_control_group_selected": return "切换炮组 / %s · %s" % [details_data.get("mount_id", ""), details_data.get("order_id", "")]
+		"fire_control_ammunition_changed": return "下一发换弹 / %s · %s · %s" % [details_data.get("mount_id", "fore"), str(details_data.get("ammunition_id", "")).trim_prefix("ammo.").to_upper(), details_data.get("order_id", "")]
+		"fire_control_locked": return "锁定照射 / %s · %s" % [details_data.get("mount_id", "fore"), details_data.get("order_id", "")]
+		"fire_control_lock_lost": return "照射终止 / %s · %s · %s" % [details_data.get("mount_id", "fore"), details_data.get("order_id", ""), details_data.get("reason", "")]
+		"gun_projectile_impact": return "甲板炮弹着 / %s · %s · %s · %s" % [details_data.get("mount_id", "fore"), details_data.get("shot_id", ""), details_data.get("order_id", ""), _impact_description(details_data)]
 		"gun_projectile_cancelled": return "炮弹清理 / %s · %s" % [details_data.get("shot_id", ""), details_data.get("reason", "行动结束")]
 		"fire_control_correction": return "校射修正 / %s · %.0f m" % [details_data.get("order_id", ""), (details_data.get("correction_km", Vector2.ZERO) as Vector2).length() * 1000]
 		"fire_control_aim_mode_changed": return "甲板炮瞄准 / %s · %s" % ["运动提前量" if details_data.get("aim_mode", "observed") == "lead" else "最后观测", details_data.get("order_id", "未指派")]
 		"fire_control_assigned": return "甲板炮指派 A1 / %s%s" % [details_data.get("order_id", ""), " · 暂停排队" if details_data.get("queued", false) else ""]
 		"fire_control_cleared": return "甲板炮撤销 A1 / %s · %s" % [details_data.get("order_id", ""), {"player_cancelled":"玩家撤销", "target_destroyed":"目标失能", "ship_sunk":"母舰沉没", "action_ended":"行动结束"}.get(details_data.get("reason", ""), "指派终止")]
-		"fire_control_rejected": return {"clear":"火控撤销拒绝 / ", "aim_mode":"瞄准切换拒绝 / ", "correction":"校射修正拒绝 / "}.get(details_data.get("action", ""), "火控指派拒绝 / ") + str(details_data.get("order_id", "")) + " · " + str(details_data.get("reason", ""))
+		"fire_control_rejected": return {"clear":"火控撤销拒绝 / ", "aim_mode":"瞄准切换拒绝 / ", "correction":"校射修正拒绝 / ", "lock":"照射拒绝 / ", "ammunition":"换弹拒绝 / ", "group":"炮组拒绝 / "}.get(details_data.get("action", ""), "火控指派拒绝 / ") + str(details_data.get("order_id", "")) + " · " + str(details_data.get("reason", ""))
 		"ship_gun_rejected": return "甲板炮射击拒绝 / %s · %s" % [details_data.get("order_id", "未指派"), details_data.get("reason", "")]
 		"contact_discovered": return "A1 回波发现"
 		"contact_updated": return "A1 方位复测"
@@ -745,7 +771,7 @@ func _event_line(event: Dictionary) -> String:
 		"target_identified", "aircraft_recon": return "A1 情报确认"
 		"ship_navigation_command": return "航行命令 %03d° / %.0f kn" % [roundi(details_data.get("heading_degrees", 0.0)), details_data.get("speed_knots", 0.0)]
 		"ship_navigation_blocked": return "航路受阻，舰艇停车"
-		"weapon_fired": return "飞机对海投弹" if details_data.get("weapon_id", "") == "aircraft.bomb" else "甲板炮射击 A1 / %s · %s · 余弹 %d" % [details_data.get("order_id", ""), "运动提前量" if details_data.get("aim_mode", "observed") == "lead" else "最后观测", details_data.get("ammo_remaining", 0)]
+		"weapon_fired": return "飞机对海投弹" if details_data.get("weapon_id", "") == "aircraft.bomb" else "甲板炮射击 A1 / %s · %s · %s · 余弹 %d" % [details_data.get("mount_id", "fore"), details_data.get("order_id", ""), "运动提前量" if details_data.get("aim_mode", "observed") == "lead" else "最后观测", details_data.get("ammo_remaining", 0)]
 		"aircraft_attack": return "飞机对海攻击 A1"
 		"enemy_damaged": return "战斗结果尚未观测" if details_data.get("source", "") == "deck_gun_unobserved" else "A1 受损 %.0f%%" % (100.0 - details_data.get("health", 100.0))
 		"ship_damaged": return "母舰受损 · 舰体 %.0f%%" % details_data.get("health", 0.0)
