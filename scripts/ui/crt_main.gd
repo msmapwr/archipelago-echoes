@@ -181,6 +181,7 @@ func toggle_unit_library() -> void:
 	unit_library.move_to_front()
 	terminal.get_node("GlassOverlay").move_to_front()
 	unit_library.family_picker.grab_focus()
+	DebugLog.write("info", "ui_library_opened", {"owns_pause": _library_paused_world}, true)
 	_refresh_ui()
 
 func close_unit_library() -> void:
@@ -189,6 +190,7 @@ func close_unit_library() -> void:
 	if _library_paused_world and GameManager.mode not in ["settlement", "campaign_failed"]:
 		GameManager.set_paused(false)
 	_library_paused_world = false
+	DebugLog.write("info", "ui_library_closed", {}, true)
 	_refresh_ui()
 
 func _build_guidance_ui() -> void:
@@ -283,6 +285,7 @@ func toggle_archive() -> void:
 		GameManager.set_paused(true)
 	_refresh_guidance()
 	archive.present(_archive_briefing(), _archive_progress(), _archive_history(), paused_before, GameManager.mode in ["settlement", "campaign_failed"], _archive_fire_control(fire_control_reason_before))
+	DebugLog.write("info", "ui_archive_opened", {"paused_before": paused_before, "fire_control_reason_before": fire_control_reason_before}, true)
 	_refresh_ui()
 
 func close_archive(resume_owned_pause: bool = true) -> void:
@@ -290,6 +293,7 @@ func close_archive(resume_owned_pause: bool = true) -> void:
 	if resume_owned_pause and _archive_paused_world and GameManager.mode not in ["settlement", "campaign_failed"]:
 		GameManager.set_paused(false)
 	_archive_paused_world = false
+	DebugLog.write("info", "ui_archive_closed", {"resume_owned_pause": resume_owned_pause}, true)
 	terminal.get_node("Footer/CommandArchive").grab_focus()
 	_refresh_ui()
 
@@ -514,10 +518,12 @@ func _on_restart_pressed() -> void:
 	_refresh_ui()
 
 func _on_contact_selected(id: String) -> void:
+	DebugLog.write("info", "ui_contact_selected", {"contact_id": id}, true)
 	selected_contact_id = id
 	_refresh_ui()
 
 func _on_contact_deselected() -> void:
+	DebugLog.write("info", "ui_contact_deselected", {}, true)
 	selected_contact_id = ""
 	_refresh_ui()
 

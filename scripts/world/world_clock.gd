@@ -15,6 +15,7 @@ func set_time_scale(value: float) -> bool:
 	if value != 1.0 and value != 10.0:
 		return false
 	time_scale = value
+	DebugLog.write("info", "time_scale_changed", {"time_scale": value}, true)
 	return true
 
 func advance(delta: float) -> bool:
@@ -22,6 +23,7 @@ func advance(delta: float) -> bool:
 		return false
 	elapsed_seconds += delta
 	time_advanced.emit(elapsed_seconds)
+	if delta >= 1.0: DebugLog.write("debug", "clock_step", {"delta": delta}, true)
 	return true
 
 func reset() -> void:

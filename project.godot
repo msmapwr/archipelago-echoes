@@ -16,6 +16,7 @@ config/features=PackedStringArray("4.7")
 
 [autoload]
 
+DebugLog="*res://scripts/core/debug_log.gd"
 UserSettings="*res://scripts/core/user_settings.gd"
 EventBus="*res://scripts/core/event_bus.gd"
 DataManager="*res://scripts/core/data_manager.gd"
@@ -23,6 +24,12 @@ GameManager="*res://scripts/core/game_manager.gd"
 WorldClock="*res://scripts/world/world_clock.gd"
 WorldState="*res://scripts/world/world_state.gd"
 MissionController="*res://scripts/core/mission_controller.gd"
+
+[debug]
+
+file_logging/enable_file_logging=true
+file_logging/log_path="user://debug/engine.log"
+file_logging/max_log_files=5
 
 [display]
 

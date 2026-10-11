@@ -15,3 +15,8 @@ Thumbs.db
 /build/
 /exports/
 p0-test.log
+
+# Developer tool caches and optional local diagnostic artifacts
+__pycache__/
+*.pyc
+/artifacts/

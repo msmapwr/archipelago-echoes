@@ -972,6 +972,7 @@ func _damage_enemy(amount: float, source: String, simulation_seconds: float = -1
 		EventBus.record("enemy_destroyed", {"id": CONTACT_ID}, simulation_seconds)
 
 func _accept(message: String) -> bool:
+	DebugLog.action_result(true, message)
 	_feedback(message)
 	return true
 
@@ -995,9 +996,11 @@ func _sortie_readiness_error() -> String:
 	return ""
 
 func _reject(message: String) -> bool:
+	DebugLog.action_result(false, message)
 	_feedback(message)
 	return false
 
 func _feedback(message: String) -> void:
 	last_message = message
+	DebugLog.write("debug", "feedback", {"message": message})
 	feedback_changed.emit(message)

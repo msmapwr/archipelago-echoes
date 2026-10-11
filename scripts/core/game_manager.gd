@@ -38,24 +38,30 @@ func reset_for_new_scenario() -> void:
 
 func change_mode(next_mode: String) -> bool:
 	if next_mode == "settlement":
+		DebugLog.write("warning", "mode_rejected", {"reason": "[GameManager] use settle() to enter settlement"}, true)
 		push_warning("[GameManager] use settle() to enter settlement")
 		return false
 	return _transition(next_mode)
 
 func _transition(next_mode: String) -> bool:
 	if not TRANSITIONS.has(next_mode) or not TRANSITIONS[mode].has(next_mode):
+		DebugLog.write("warning", "mode_rejected", {"reason": "[GameManager] forbidden transition: %s -> %s" % [mode, next_mode]}, true)
 		push_warning("[GameManager] forbidden transition: %s -> %s" % [mode, next_mode])
 		return false
 	if next_mode == "bridge" and not ship_afloat:
+		DebugLog.write("warning", "mode_rejected", {"reason": "[GameManager] cannot return to a sunken ship"}, true)
 		push_warning("[GameManager] cannot return to a sunken ship")
 		return false
 	if mode == "returning" and next_mode == "bridge" and (not player_recovered or recovery_site != "ship"):
+		DebugLog.write("warning", "mode_rejected", {"reason": "[GameManager] return to bridge requires ship recovery"}, true)
 		push_warning("[GameManager] return to bridge requires ship recovery")
 		return false
 	if next_mode == "settlement" and (not target_identified or not player_recovered):
+		DebugLog.write("warning", "mode_rejected", {"reason": "[GameManager] settlement requires identified target and safe recovery"}, true)
 		push_warning("[GameManager] settlement requires identified target and safe recovery")
 		return false
 	if next_mode == "campaign_failed" and player_alive:
+		DebugLog.write("warning", "mode_rejected", {"reason": "[GameManager] campaign failure requires player death"}, true)
 		push_warning("[GameManager] campaign failure requires player death")
 		return false
 	var previous_mode := mode

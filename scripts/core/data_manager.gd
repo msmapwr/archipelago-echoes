@@ -35,6 +35,7 @@ func reload() -> bool:
 		register_definition(resource, path)
 	validate_catalog()
 	for error in errors:
+		DebugLog.write("error", "data_validation_error", {"reason": error})
 		push_error("[DataManager] " + error)
 	return errors.is_empty()
 

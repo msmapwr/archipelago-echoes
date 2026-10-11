@@ -26,16 +26,19 @@ func load_first_scenario(map_seed: int = FIRST_SCENARIO_SEED) -> bool:
 	generation_error = ""
 	if map_seed < 0 or map_seed > 2147483647:
 		generation_error = "海域种子必须在 0–2147483647 之间。"
+		DebugLog.write("warning", "generation_rejected", {"seed": map_seed, "reason": generation_error}, true)
 		return false
 	var contact: ContactDefinition = DataManager.get_definition("contact.alpha") as ContactDefinition
 	var ship: ShipDefinition = DataManager.get_definition("ship.haven") as ShipDefinition
 	if contact == null or ship == null:
 		generation_error = "首关舰艇或接触数据缺失。"
+		DebugLog.write("error", "generation_rejected", {"seed": map_seed, "reason": generation_error})
 		push_error("[WorldState] first scenario ship or contact is missing")
 		return false
 	var candidate = ArchipelagoMap.new(map_seed, contact.bearing_degrees, contact.range_km)
 	if not candidate.is_water(candidate.ship_start_km) or not candidate.is_water(candidate.contact_position_km) or not candidate.can_navigate_segment(candidate.ship_start_km, candidate.ship_start_km + Vector2(0, preload("res://scripts/world/harbor_navigation.gd").EXIT_Y_KM)):
 		generation_error = "海域未通过出生点与离港航道校验，请更换种子重试。"
+		DebugLog.write("warning", "generation_rejected", {"seed": map_seed, "reason": generation_error}, true)
 		return false
 	map = candidate
 	scenario_seed = map_seed
@@ -47,12 +50,15 @@ func load_first_scenario(map_seed: int = FIRST_SCENARIO_SEED) -> bool:
 	_last_clock_seconds = WorldClock.elapsed_seconds
 	ship_position_changed.emit(ship_position_km)
 	ship_command_changed.emit(ship_heading_degrees, ship_speed_knots)
+	DebugLog.write("info", "world_generated", {"seed": scenario_seed}, true)
 	return true
 
 func set_ship_command(heading_degrees: float, speed_knots: float) -> bool:
 	if map == null or not is_finite(heading_degrees) or not is_finite(speed_knots):
+		DebugLog.write("warning", "navigation_rejected", {"reason": "invalid map or nonfinite command"})
 		return false
 	if speed_knots < 0.0 or speed_knots > ship_max_speed_knots:
+		DebugLog.write("warning", "navigation_rejected", {"reason": "speed outside ship limits", "speed_knots": speed_knots})
 		return false
 	ship_heading_degrees = fposmod(heading_degrees, 360.0)
 	ship_speed_knots = speed_knots

@@ -18,5 +18,6 @@ func record(kind: String, details: Dictionary = {}, simulation_seconds: float = 
 	if clock != null:
 		event["simulation_seconds"] = simulation_seconds if is_finite(simulation_seconds) and simulation_seconds >= 0 else clock.elapsed_seconds
 	history.append(event)
+	DebugLog.event(event)
 	event_recorded.emit(event)
 	print("[EventBus] %s %s" % [kind, JSON.stringify(details)])
