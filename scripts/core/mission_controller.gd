@@ -70,6 +70,10 @@ var next_enemy_fire_seconds: float = 35.0
 var enemy_tracking_ship: bool = false
 var enemy_alert_until_seconds: float = 0.0
 var _enemy_origin_km: Vector2 = Vector2.ZERO
+var _enemy_navigation = preload("res://scripts/core/enemy_navigation.gd").new()
+var enemy_navigation_blocked := false
+var observed_contact_maneuver := ""
+var _observed_contact_heading := 0.0
 
 var switch_seconds_remaining: float = 0.0
 var aircraft_position_km: Vector2 = Vector2.ZERO
@@ -144,6 +148,11 @@ func _initialize_scenario() -> void:
 	enemy_tracking_ship = false
 	enemy_alert_until_seconds = 0.0
 	_enemy_origin_km = WorldState.contact_position_km
+	_enemy_navigation.reset()
+	enemy_navigation_blocked = false
+	observed_contact_maneuver = ""
+	_observed_contact_heading = 90.0
+	enemy_speed_knots = 6.0
 	switch_seconds_remaining = 0.0
 	aircraft_position_km = WorldState.ship_position_km
 	aircraft_heading_degrees = 42.0
@@ -183,6 +192,7 @@ func scan() -> bool:
 			EventBus.record("contact_lost", {"id": CONTACT_ID})
 		state_changed.emit()
 		return _reject("扫描无回波，保留最后观测")
+	_update_observed_maneuver()
 	contact_scan_count += 1
 	last_contact_position_km = WorldState.contact_position_km
 	last_contact_bearing_degrees = WorldState.contact_bearing_degrees()
@@ -559,6 +569,7 @@ func _advance_gun_projectiles(delta: float, total_seconds: float, observer_origi
 			last_gun_impact.armor_outcome = damage_result.outcome
 		EventBus.record("gun_projectile_impact", last_gun_impact, cursor)
 		if hit:
+			_enemy_navigation.observe_threat(shot.origin_km)
 			_damage_enemy(damage_result.damage, "deck_gun" if observed else "deck_gun_unobserved", cursor)
 		_feedback("甲板炮命中 A1" if observed and hit else "近失弹：偏差 %.0f 米，可修正下一发" % (error.length() * 1000) if observed and result == "near_miss" else "炮弹未命中：偏差 %.0f 米" % (error.length() * 1000) if observed else "炮弹已到达，结果未观测；重新扫描")
 	_advance_enemy(maxf(0, total_seconds - cursor))
@@ -863,6 +874,15 @@ func _on_world_time_advanced(total_seconds: float) -> void:
 func _advance_enemy(delta: float) -> void:
 	if not enemy_alive:
 		return
+	if _enemy_navigation.withdrawing:
+		var profile := DataManager.get_definition(CONTACT_ID) as ContactDefinition
+		var movement: Dictionary = _enemy_navigation.advance(WorldState.contact_position_km, enemy_heading_degrees, enemy_speed_knots, delta, profile.withdrawal_turn_degrees, WorldState.map)
+		WorldState.contact_position_km = movement.position
+		enemy_heading_degrees = movement.heading
+		if enemy_navigation_blocked != movement.blocked:
+			enemy_navigation_blocked = movement.blocked
+			DebugLog.write("debug", "enemy_navigation_obstacle", {"blocked": enemy_navigation_blocked}, true)
+		return
 	var direction := 1.0 if enemy_heading_degrees == 90.0 else -1.0
 	var destination := WorldState.contact_position_km + Vector2(direction * enemy_speed_knots * KNOT_TO_KM_PER_SECOND * delta, 0.0)
 	if absf(destination.x - _enemy_origin_km.x) > 3.0 or not WorldState.map.can_navigate_segment(WorldState.contact_position_km, destination):
@@ -896,6 +916,7 @@ func _update_enemy_tracking(total_seconds: float) -> void:
 	var radar_intercept: bool = radar_emitting and range_km <= RADAR_INTERCEPT_RANGE_KM and line_of_sight
 	var visual_contact: bool = range_km <= VISUAL_SPOTTING_RANGE_KM and line_of_sight
 	if radar_intercept or visual_contact:
+		_enemy_navigation.observe_threat(WorldState.ship_position_km)
 		enemy_alert_until_seconds = maxf(enemy_alert_until_seconds, total_seconds + TRACK_MEMORY_SECONDS)
 	var tracking: bool = radar_intercept or visual_contact or total_seconds < enemy_alert_until_seconds
 	if tracking and not enemy_tracking_ship:
@@ -960,6 +981,7 @@ func _advance_aircraft(delta: float) -> void:
 		_feedback("燃油紧急：不足 30 秒，立即寻找回收窗口" if warning_level == 2 else "燃油预警：不足两分钟，请返航回收")
 
 func _damage_enemy(amount: float, source: String, simulation_seconds: float = -1.0) -> void:
+	if source == "aircraft_bomb": _enemy_navigation.observe_threat(aircraft_position_km)
 	enemy_health = maxf(0.0, enemy_health - amount)
 	EventBus.damage_reported.emit(CONTACT_ID)
 	EventBus.record("enemy_damaged", {"health": enemy_health, "source": source}, simulation_seconds)
@@ -970,6 +992,30 @@ func _damage_enemy(amount: float, source: String, simulation_seconds: float = -1
 		contact_visible = false
 		_clear_fire_control("target_destroyed", simulation_seconds)
 		EventBus.record("enemy_destroyed", {"id": CONTACT_ID}, simulation_seconds)
+	elif _enemy_navigation.react_to_damage(enemy_health, (DataManager.get_definition(CONTACT_ID) as ContactDefinition).withdrawal_health):
+		var profile := DataManager.get_definition(CONTACT_ID) as ContactDefinition
+		enemy_speed_knots = profile.withdrawal_speed_knots
+		# Actual intent is diagnostic data, never a player-visible EventBus event.
+		DebugLog.write("info", "enemy_withdrawal_started", {"health": enemy_health, "source": source, "threat_known": _enemy_navigation.threat_known, "threat_position_km": _enemy_navigation.threat_position_km}, true, simulation_seconds)
+
+func _update_observed_maneuver() -> void:
+	if contact_scan_count == 0 or not GameManager.target_identified:
+		_observed_contact_heading = enemy_heading_degrees
+		return
+	if WorldClock.elapsed_seconds - last_contact_seconds < 1.0: return
+	var turn := absf(wrapf(enemy_heading_degrees - _observed_contact_heading, -180, 180))
+	var movement := WorldState.contact_position_km - last_contact_position_km
+	var away := last_contact_position_km - WorldState.ship_position_km
+	var description := "转向机动" if turn >= 15 else "正在远离本舰" if movement.length() >= 0.01 and movement.dot(away) > 0 else "保持观测航向"
+	if description != observed_contact_maneuver:
+		observed_contact_maneuver = description
+		EventBus.record("contact_maneuver_observed", {"id": CONTACT_ID, "description": description, "heading_degrees": enemy_heading_degrees, "observation_seconds": WorldClock.elapsed_seconds})
+	_observed_contact_heading = enemy_heading_degrees
+
+func contact_maneuver_status() -> String:
+	if observed_contact_maneuver.is_empty() or not GameManager.target_identified: return ""
+	var stale := not radar_emitting or not contact_visible or WorldClock.elapsed_seconds - last_contact_seconds > 45.0
+	return observed_contact_maneuver + (" / 旧观测" if stale else " / 复测观测")
 
 func _accept(message: String) -> bool:
 	DebugLog.action_result(true, message)

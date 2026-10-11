@@ -260,6 +260,7 @@ func guidance_state() -> Dictionary:
 	state.fire_control_group = MissionController.active_gun_mount().display_name
 	state.fire_control_impact = MissionController.last_gun_impact if MissionController.last_gun_impact.get("order_id", "") == MissionController.fire_control_order_id else {}
 	state.enemy_alive = MissionController.enemy_alive
+	state.contact_maneuver = MissionController.contact_maneuver_status()
 	return state
 
 func _refresh_guidance() -> void:
@@ -697,7 +698,8 @@ func _refresh_contact() -> void:
 		if GameManager.mode == "cockpit" or GameManager.mode == "returning":
 			contact_details.text = "方位 %03d°   距离 %.1f km   /   %s" % [roundi(MissionController.last_contact_bearing_degrees), MissionController.last_contact_range_km, "已确认" if GameManager.target_identified else "待确认"]
 		else:
-			contact_details.text = "方位 %03d°   距离 %.1f km\n观测 T+%02d:%02d   /   %s" % [roundi(MissionController.last_contact_bearing_degrees), MissionController.last_contact_range_km, floori(float(seen) / 60.0), seen % 60, "稳定" if MissionController.contact_visible else "中断"]
+			var maneuver := MissionController.contact_maneuver_status()
+			contact_details.text = "方位 %03d°   距离 %.1f km\n观测 T+%02d:%02d   /   %s" % [roundi(MissionController.last_contact_bearing_degrees), MissionController.last_contact_range_km, floori(float(seen) / 60.0), seen % 60, maneuver if not maneuver.is_empty() else "稳定" if MissionController.contact_visible else "中断"]
 	selection_details.text = "雷达静默 · 开机后可复测接触" if not MissionController.radar_emitting else ("已选择 A1 · 确认身份后可指派甲板炮目标" if selected_contact_id == MissionController.CONTACT_ID else "未选择接触 · 点击雷达回波")
 
 func _refresh_ship() -> void:
@@ -774,6 +776,7 @@ func _event_line(event: Dictionary) -> String:
 		"radar_emission_changed": return "舰载雷达开启" if details_data.get("emitting", false) else "舰载雷达静默"
 		"enemy_tracking": return "敌方截获舰载雷达" if details_data.get("source", "") == "radar" else "敌舰发现母舰"
 		"enemy_tracking_lost": return "敌舰失去追踪"
+		"contact_maneuver_observed": return "A1 复测 / " + str(details_data.get("description", "机动"))
 		"target_identified", "aircraft_recon": return "A1 情报确认"
 		"ship_navigation_command": return "航行命令 %03d° / %.0f kn" % [roundi(details_data.get("heading_degrees", 0.0)), details_data.get("speed_knots", 0.0)]
 		"ship_navigation_blocked": return "航路受阻，舰艇停车"

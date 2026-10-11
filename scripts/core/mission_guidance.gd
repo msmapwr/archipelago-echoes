@@ -27,6 +27,8 @@ static func project(state: Dictionary) -> Dictionary:
 				result.fire_control_hint = "薄甲目标发生过穿：尝试 SAP 或 HE，等待装填后再射击。"
 			if state.has("fire_control_group"):
 				result.fire_control_hint = str(state.fire_control_group) + " / " + result.fire_control_hint
+			if "转向" in str(state.get("contact_maneuver", "")) or "远离" in str(state.get("contact_maneuver", "")):
+				result.fire_control_hint += " 目标机动：复测更新运动解；追击前留意敌方还击与返航。"
 		elif identified and state.get("enemy_alive", true):
 			result.fire_control_hint = "交战为可选操作：选择 A1 → 指派目标 → 甲板炮；指派不会自动开火。"
 	if mode == "campaign_failed":

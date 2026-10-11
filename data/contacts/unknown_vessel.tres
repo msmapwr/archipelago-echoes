@@ -10,3 +10,6 @@ bearing_degrees = 42.0
 range_km = 18.0
 faction_id = "unknown"
 identified_ship_id = "ship.destroyer"
+withdrawal_health = 40.0
+withdrawal_speed_knots = 18.0
+withdrawal_turn_degrees = 5.0

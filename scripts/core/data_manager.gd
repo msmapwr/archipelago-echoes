@@ -116,7 +116,10 @@ func _validate_fields(definition: GameDefinition, source: String) -> bool:
 	elif definition is WeaponDefinition:
 		positive_fields = ["range_km", "projectile_speed_km_per_second"]
 	elif definition is ContactDefinition:
-		positive_fields = ["range_km"]
+		positive_fields = ["range_km", "withdrawal_speed_knots", "withdrawal_turn_degrees"]
+		if not is_finite(definition.withdrawal_health) or definition.withdrawal_health <= 0 or definition.withdrawal_health >= 100 or definition.withdrawal_turn_degrees > 180:
+			errors.append("%s: invalid enemy withdrawal profile" % source)
+			return false
 		if not is_finite(definition.bearing_degrees) or definition.bearing_degrees < 0 or definition.bearing_degrees >= 360:
 			errors.append("%s: bearing_degrees must be finite and in [0, 360)" % source)
 			return false

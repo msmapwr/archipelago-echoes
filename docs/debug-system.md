@@ -149,6 +149,8 @@ DebugLog.checkpoint("before_new_operation")
 
 Python 可复用模块：`runner.execute` 负责进程、超时、日志和结果；`select_tests` 负责安全发现；`analysis.read_logs/filtered/summarize/state_diff` 负责分析；`bundle` 负责有限收集。均以 Path／参数数组交互，不用 shell 拼接。
 
+敌舰撤离切片新增 `capture enemy-withdrawal`；用 `analyze <目录> --kind enemy_withdrawal` 查询触发记录，快照中的 `MissionController.enemy_navigation` 显示威胁记忆、撤离与阻挡状态。玩家采样情报通过 `event.contact_maneuver_observed` 查询。
+
 ## 8. 验收入口
 
 | 行为 | 回归证据 |

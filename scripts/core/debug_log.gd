@@ -147,7 +147,9 @@ func snapshot() -> Dictionary:
 		var values := {}
 		for field in fields[node_name]: values[field] = _json_value(node.get(field))
 		if node_name == "UserSettings": values.preferences = {"master_volume": node.preferences.master_volume, "window_preset": node.preferences.window_preset, "reduced_crt": node.preferences.reduced_crt}
-		if node_name == "MissionController": values.gun_groups = _json_value(node.gun_groups())
+		if node_name == "MissionController":
+			values.gun_groups = _json_value(node.gun_groups())
+			values.enemy_navigation = {"withdrawing": node._enemy_navigation.withdrawing, "threat_known": node._enemy_navigation.threat_known, "threat_position_km": _json_value(node._enemy_navigation.threat_position_km), "blocked": node.enemy_navigation_blocked, "observed_maneuver": node.contact_maneuver_status()}
 		result[node_name] = values
 	return result
 
