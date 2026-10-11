@@ -34,7 +34,7 @@ func load_first_scenario(map_seed: int = FIRST_SCENARIO_SEED) -> bool:
 		push_error("[WorldState] first scenario ship or contact is missing")
 		return false
 	var candidate = ArchipelagoMap.new(map_seed, contact.bearing_degrees, contact.range_km)
-	if not candidate.is_water(candidate.ship_start_km) or not candidate.is_water(candidate.contact_position_km) or not candidate.can_navigate_segment(candidate.ship_start_km, candidate.ship_start_km + Vector2(0, -0.32)):
+	if not candidate.is_water(candidate.ship_start_km) or not candidate.is_water(candidate.contact_position_km) or not candidate.can_navigate_segment(candidate.ship_start_km, candidate.ship_start_km + Vector2(0, preload("res://scripts/world/harbor_navigation.gd").EXIT_Y_KM)):
 		generation_error = "海域未通过出生点与离港航道校验，请更换种子重试。"
 		return false
 	map = candidate

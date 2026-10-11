@@ -25,6 +25,7 @@ var last_contact_position_km: Vector2 = Vector2.ZERO
 var last_contact_bearing_degrees: float = 0.0
 var last_contact_range_km: float = 0.0
 var last_contact_seconds: float = 0.0
+var last_contact_heading_degrees: float = 0.0
 
 var ship_health: float = 100.0
 var ship_ammo: int = 6
@@ -84,6 +85,7 @@ func _initialize_scenario() -> void:
 	last_contact_bearing_degrees = 0.0
 	last_contact_range_km = 0.0
 	last_contact_seconds = 0.0
+	last_contact_heading_degrees = 0.0
 	ship_health = 100.0
 	ship_ammo = 6
 	next_ship_fire_seconds = 0.0
@@ -141,6 +143,7 @@ func scan() -> bool:
 	last_contact_bearing_degrees = WorldState.contact_bearing_degrees()
 	last_contact_range_km = range_km
 	last_contact_seconds = WorldClock.elapsed_seconds
+	last_contact_heading_degrees = enemy_heading_degrees
 	var kind := "contact_updated" if was_visible else "contact_discovered"
 	if was_visible:
 		EventBus.contact_updated.emit(CONTACT_ID)

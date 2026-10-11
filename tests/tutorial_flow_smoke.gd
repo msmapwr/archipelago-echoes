@@ -10,6 +10,7 @@ func _run() -> void:
 	var settings: Node = root.get_node("UserSettings")
 	var original_progress_path: String = settings.tutorial_progress_path
 	var original_completed: bool = settings.tutorial_completed
+	var original_skip: bool = settings.skip_tutorial_by_default
 	var original_error: String = settings.tutorial_progress_error
 	var progress_path := "user://qa_tutorial_%d.cfg" % Time.get_ticks_usec()
 	settings.tutorial_progress_path = progress_path
@@ -47,6 +48,17 @@ func _run() -> void:
 	root.add_child(shell)
 	shell.get_node("StartButton").emit_signal("pressed")
 	var prep: Control = shell.get_node("GameCRTSlot/Preparation")
+	_check(settings.skip_tutorial_by_default, "new profiles default to skipping tutorial")
+	prep.advance()
+	prep.advance()
+	_check(prep.stage == "background" and prep.replay_tutorial_button.visible, "first-time player can manually open tutorial")
+	prep.advance()
+	_check(prep.stage == "orders" and not settings.tutorial_completed and not FileAccess.file_exists(progress_path), "first session skips tutorial without fabricating completion")
+	prep.replay_tutorial_button.emit_signal("pressed")
+	_check(prep.stage == "tutorial" and prep.advance_button.disabled, "manual first-time tutorial retains its practice gate")
+	settings.skip_tutorial_by_default = false
+	prep.page_index = 0
+	prep._refresh_page()
 	var mission: Node = root.get_node("MissionController")
 	var clock: Node = root.get_node("WorldClock")
 	var world: Node = root.get_node("WorldState")
@@ -136,6 +148,7 @@ func _run() -> void:
 	DirAccess.remove_absolute(progress_path)
 	settings.tutorial_progress_path = original_progress_path
 	settings.tutorial_completed = original_completed
+	settings.skip_tutorial_by_default = original_skip
 	settings.tutorial_progress_error = original_error
 	fresh.menu_requested.emit()
 	if failures.is_empty():

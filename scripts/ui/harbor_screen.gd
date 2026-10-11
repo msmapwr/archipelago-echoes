@@ -19,7 +19,7 @@ var command_buttons: Array[Button] = []
 class HarborChart extends Control:
 	var navigation: RefCounted
 	func _point(value: Vector2) -> Vector2:
-		return Vector2(24, 24) + (value - Vector2(-0.25, -0.36)) * (size - Vector2(48, 48)) / Vector2(0.5, 0.44)
+		return Vector2(24, 24) + (value - Navigation.WATER_BOUNDS.position) * (size - Vector2(48, 48)) / Navigation.WATER_BOUNDS.size
 	func _draw() -> void:
 		if navigation == null:
 			return
@@ -34,8 +34,14 @@ class HarborChart extends Control:
 			var rect := Rect2(_point(obstacle.position), _point(obstacle.end) - _point(obstacle.position))
 			draw_rect(rect, Color("#244536"))
 			draw_rect(rect, Color("#88aa91"), false, 2.0)
-		draw_string(get_theme_default_font(), _point(Vector2(-0.22, -0.02)), "码头", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color("#bfd0bb"))
-		draw_string(get_theme_default_font(), _point(Vector2(0.11, -0.15)), "防波堤", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color("#bfd0bb"))
+		# Berth lines and warehouses stay inside the solid quay's collision bounds.
+		for berth in range(3):
+			var y := -0.36 + berth * 0.22
+			draw_line(_point(Vector2(-0.55, y)), _point(Vector2(-0.32, y)), Color("#e8b968"), 3)
+			draw_string(get_theme_default_font(), _point(Vector2(-0.85, y)), "B%02d" % (berth + 1), HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("#bfd0bb"))
+			draw_rect(Rect2(_point(Vector2(-0.95, y - 0.12)), _point(Vector2(-0.66, y - 0.03)) - _point(Vector2(-0.95, y - 0.12))), Color("#55715a"), false, 2)
+		draw_string(get_theme_default_font(), _point(Vector2(-0.92, 0.24)), "码头 / 泊位", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color("#bfd0bb"))
+		draw_string(get_theme_default_font(), _point(Vector2(0.44, -0.60)), "防波堤", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color("#bfd0bb"))
 		var gate_left := _point(Vector2(-Navigation.EXIT_HALF_WIDTH_KM, Navigation.EXIT_Y_KM))
 		var gate_right := _point(Vector2(Navigation.EXIT_HALF_WIDTH_KM, Navigation.EXIT_Y_KM))
 		draw_line(gate_left, gate_right, Color("#e8b968"), 3.0)
@@ -43,12 +49,13 @@ class HarborChart extends Control:
 		draw_dashed_line(_point(Vector2.ZERO), _point(Vector2(0, Navigation.EXIT_Y_KM)), Color("#5c9971"), 1.0, 8.0)
 		var ship := _point(navigation.position_km)
 		var direction := Vector2(sin(deg_to_rad(navigation.heading_degrees)), -cos(deg_to_rad(navigation.heading_degrees)))
-		preload("res://scripts/data/unit_glyph.gd").draw(self, ship, 42, "ship.escort_carrier", Color("#a5f1ba"))
+		draw_set_transform(ship, deg_to_rad(navigation.heading_degrees))
+		preload("res://scripts/data/unit_glyph.gd").draw(self, Vector2.ZERO, 60, "ship.escort_carrier", Color("#a5f1ba"))
+		draw_set_transform(Vector2.ZERO)
 		draw_line(ship + direction * 25, ship + direction * 36, Color("#a5f1ba"), 2)
 		draw_line(ship + direction * 36, ship + direction * 36 - direction.rotated(0.6) * 7, Color("#a5f1ba"), 2)
 		draw_line(ship + direction * 36, ship + direction * 36 - direction.rotated(-0.6) * 7, Color("#a5f1ba"), 2)
-		preload("res://scripts/data/unit_glyph.gd").draw(self, Vector2(80, size.y - 90), 64, "building.port", Color("#a4c6af"), "medium", 1, true)
-		draw_string(get_theme_default_font(), Vector2(35, size.y - 40), "港区平面图 · 码头 / 防波堤", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color("#a4c6af"))
+		draw_string(get_theme_default_font(), Vector2(35, size.y - 4), "港区 2 km · 码头 / 防波堤", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("#a4c6af"))
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS

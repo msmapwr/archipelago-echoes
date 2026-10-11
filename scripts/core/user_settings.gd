@@ -6,6 +6,7 @@ var preferences = Preferences.new()
 var settings_path: String = SETTINGS_PATH
 var tutorial_progress_path: String = "user://tutorial_progress.cfg"
 var tutorial_completed: bool = false
+var skip_tutorial_by_default: bool = true
 var tutorial_progress_error: String = ""
 
 func _ready() -> void:
@@ -20,7 +21,7 @@ func load_tutorial_progress() -> bool:
 		return true
 	var config := ConfigFile.new()
 	if config.load(tutorial_progress_path) != OK or config.get_value("tutorial", "version", 0) != 1 or typeof(config.get_value("tutorial", "completed", false)) != TYPE_BOOL:
-		tutorial_progress_error = "教程记录无法读取；本次仍显示新手教程。"
+		tutorial_progress_error = "教程记录无法读取；仍可手动打开新手教程。"
 		tutorial_completed = false
 		return false
 	tutorial_completed = config.get_value("tutorial", "completed", false)
@@ -34,7 +35,7 @@ func mark_tutorial_completed() -> bool:
 	config.set_value("tutorial", "completed", true)
 	var pending := tutorial_progress_path + ".tmp"
 	if config.save(pending) != OK or DirAccess.rename_absolute(pending, tutorial_progress_path) != OK:
-		tutorial_progress_error = "教程记录保存失败；本次可继续，下次可能仍显示教程。"
+		tutorial_progress_error = "教程记录保存失败；本次可继续，仍可手动打开教程。"
 		return false
 	tutorial_completed = true
 	tutorial_progress_error = ""

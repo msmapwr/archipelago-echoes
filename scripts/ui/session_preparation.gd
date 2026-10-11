@@ -129,7 +129,7 @@ func advance() -> void:
 		departure_requested.emit()
 		return
 	page_index += 1
-	if PAGES[page_index]["id"] == "tutorial" and UserSettings.tutorial_completed:
+	if PAGES[page_index]["id"] == "tutorial" and (UserSettings.skip_tutorial_by_default or UserSettings.tutorial_completed):
 		page_index += 1
 	_refresh_page()
 
@@ -157,8 +157,9 @@ func _refresh_page() -> void:
 	generation_form.visible = stage == "generation"
 	tutorial.visible = stage == "tutorial"
 	advance_button.text = page["action"]
-	replay_tutorial_button.visible = UserSettings.tutorial_completed and stage in ["background", "orders"]
-	if stage == "background" and UserSettings.tutorial_completed:
+	replay_tutorial_button.visible = stage in ["background", "orders"]
+	replay_tutorial_button.text = "重播新手教程" if UserSettings.tutorial_completed else "打开新手教程"
+	if stage == "background" and (UserSettings.skip_tutorial_by_default or UserSettings.tutorial_completed):
 		advance_button.text = "继续阅读命令"
 	advance_button.disabled = stage == "generation" and not generation_ready
 	if stage in ["background", "orders"]:

@@ -7,6 +7,7 @@ func _initialize() -> void:
 
 func _run() -> void:
 	root.get_node("UserSettings").tutorial_completed = false # First-run preparation fixture; no persistent write.
+	root.get_node("UserSettings").skip_tutorial_by_default = false # Explicit training fixture.
 	var mission: Node = root.get_node("MissionController")
 	var game: Node = root.get_node("GameManager")
 	var clock: Node = root.get_node("WorldClock")
@@ -20,7 +21,7 @@ func _run() -> void:
 	var harbor: Control = shell.get_node("GameCRTSlot/Harbor")
 	harbor.navigation.cast_off()
 	harbor.navigation.set_command(0.0, 10.0)
-	harbor.advance_navigation(100.0)
+	harbor.advance_navigation(400.0)
 	root.get_node("WorldState").set_ship_command(0.0, 0.0)
 	var main: Control = shell.get_node("GameCRTSlot").get_child(0)
 	var terminal: Control = main.get_node("ScreenContainer/ScreenViewport/Terminal")

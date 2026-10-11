@@ -7,6 +7,7 @@ func _initialize() -> void:
 
 func _run() -> void:
 	root.get_node("UserSettings").tutorial_completed = false # Exercise first-run pages without modifying the saved record.
+	root.get_node("UserSettings").skip_tutorial_by_default = false # Explicit training fixture.
 	var shell: Control = load("res://scenes/main/console_shell.tscn").instantiate()
 	root.add_child(shell)
 	var clock: Node = root.get_node("WorldClock")
@@ -73,16 +74,16 @@ func _run() -> void:
 	harbor.command_buttons[2].emit_signal("pressed")
 	_check(harbor.navigation.speed_knots == 2.0, "throttle button controls harbor vessel")
 	harbor.toggle_pause()
-	harbor.advance_navigation(100.0)
+	harbor.advance_navigation(400.0)
 	_check(harbor.navigation.position_km == Vector2.ZERO, "harbor pause freezes navigation")
 	harbor.toggle_pause()
 	harbor.advance_navigation(10.0)
 	_check(paused and clock.elapsed_seconds == seconds_before and mission.ship_health == health_before and root.get_node("WorldState").contact_position_km == enemy_before, "harbor does not advance sea combat or mission clock")
 	harbor.navigation.set_command(0.0, 10.0)
-	harbor.advance_navigation(100.0)
+	harbor.advance_navigation(400.0)
 	_check(not paused and shell.started and shell.session_stage == "mission", "departure enters playable state")
 	var world: Node = root.get_node("WorldState")
-	_check(world.ship_position_km.is_equal_approx(world.map.ship_start_km + Vector2(0, -0.32)) and world.ship_speed_knots == 10.0 and world.ship_heading_degrees == 0.0, "sea mission preserves departure position, heading and speed")
+	_check(world.ship_position_km.is_equal_approx(world.map.ship_start_km + Vector2(0, -1.28)) and world.ship_speed_knots == 10.0 and world.ship_heading_degrees == 0.0, "sea mission preserves departure position, heading and speed")
 	_check(not menu_crt.visible and not shell.get_node("StartButton").visible, "menu gives way to game CRT")
 	var slot: Control = shell.get_node("GameCRTSlot")
 	_check(slot.visible and slot.get_child_count() == 1, "previous CRT is mounted in central slot")

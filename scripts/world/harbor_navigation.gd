@@ -2,10 +2,10 @@ extends RefCounted
 
 const KNOT_TO_KM_PER_SECOND := 1.852 / 3600.0
 const MAX_SPEED_KNOTS := 10.0
-const EXIT_Y_KM := -0.32
-const EXIT_HALF_WIDTH_KM := 0.08
-const WATER_BOUNDS := Rect2(-0.25, -0.36, 0.5, 0.44)
-const OBSTACLES: Array[Rect2] = [Rect2(-0.25, -0.12, 0.17, 0.2), Rect2(0.08, -0.20, 0.17, 0.08)]
+const EXIT_Y_KM := -1.28
+const EXIT_HALF_WIDTH_KM := 0.32
+const WATER_BOUNDS := Rect2(-1.0, -1.44, 2.0, 1.76)
+const OBSTACLES: Array[Rect2] = [Rect2(-1.0, -0.48, 0.68, 0.8), Rect2(0.32, -0.80, 0.68, 0.32)]
 
 var position_km := Vector2.ZERO
 var heading_degrees: float = 0.0

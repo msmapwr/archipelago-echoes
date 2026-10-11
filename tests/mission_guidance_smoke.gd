@@ -8,6 +8,7 @@ func _initialize() -> void:
 
 func _run() -> void:
 	root.get_node("UserSettings").tutorial_completed = false # First-run preparation fixture; no persistent write.
+	root.get_node("UserSettings").skip_tutorial_by_default = false # Explicit training fixture.
 	_check(Guidance.project({}).stage == "search", "no observations directs active search")
 	_check(Guidance.project({"scans": 1, "contact_visible": false}).next.contains("回波中断"), "lost contact supplies recovery direction")
 	_check(Guidance.project({"identified": true}).stage == "sortie", "identification alone does not claim mission success")
@@ -40,7 +41,7 @@ func _run() -> void:
 	var harbor: Control = shell.get_node("GameCRTSlot/Harbor")
 	harbor.navigation.cast_off()
 	harbor.navigation.set_command(0, 10)
-	harbor.advance_navigation(100)
+	harbor.advance_navigation(400)
 	var main: Control = shell.get_node("GameCRTSlot").get_child(0)
 	var mission: Node = root.get_node("MissionController")
 	var game: Node = root.get_node("GameManager")

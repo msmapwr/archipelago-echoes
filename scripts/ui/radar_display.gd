@@ -308,10 +308,16 @@ func contact_energy() -> float:
 
 func _draw_unit_symbol(point: Vector2, family: String, tint: Color, heading: float = NAN, texture: Texture2D = null, size_class: String = "medium", variant: int = 1) -> void:
 	var pixels := clampf(34.0 * MAX_RANGE_KM / display_range_km, 32, 48)
+	var rotates := family.begins_with("ship.") and is_finite(heading)
+	if rotates:
+		draw_set_transform(point, deg_to_rad(heading))
+	var origin := Vector2.ZERO if rotates else point
 	if texture != null:
-		draw_texture_rect(texture, Rect2(point - Vector2.ONE * pixels * 0.5, Vector2.ONE * pixels), false, tint)
+		draw_texture_rect(texture, Rect2(origin - Vector2.ONE * pixels * 0.5, Vector2.ONE * pixels), false, tint)
 	else:
-		preload("res://scripts/data/unit_glyph.gd").draw(self, point, pixels, family, tint, size_class, variant)
+		preload("res://scripts/data/unit_glyph.gd").draw(self, origin, pixels, family, tint, size_class, variant)
+	if rotates:
+		draw_set_transform(Vector2.ZERO)
 	if family.begins_with("ship.") and is_finite(heading):
 		var direction := Vector2.UP.rotated(deg_to_rad(heading))
 		var tip := point + direction * (pixels * 0.5 + 11)
@@ -342,7 +348,7 @@ func _draw_contact(_center: Vector2, _radius: float) -> void:
 		if contact != null and not contact.identified_ship_id.is_empty():
 			var ship: ShipDefinition = DataManager.get_definition(contact.identified_ship_id) as ShipDefinition
 			if ship != null:
-				_draw_unit_symbol(point, ship.visual_family_id, Color(tint, strength), NAN, ship.symbol_texture, ship.size_class, ship.shape_variant)
+				_draw_unit_symbol(point, ship.visual_family_id, Color(tint, strength), MissionController.last_contact_heading_degrees, ship.symbol_texture, ship.size_class, ship.shape_variant)
 	if contact_selected_state:
 		draw_arc(point, 17.0, 0.0, TAU, 40, AMBER, 1.5, true)
 	if fire_control_assigned and not flight_navigation:

@@ -34,6 +34,10 @@ func _run() -> void:
 	var radar: Control = load("res://scripts/ui/radar_display.gd").new()
 	root.add_child(radar)
 	mission.scan()
+	_check(mission.last_contact_heading_degrees == mission.enemy_heading_degrees, "scan captures contact heading")
+	var observed_heading: float = mission.last_contact_heading_degrees
+	mission.enemy_heading_degrees = fposmod(observed_heading + 180, 360)
+	_check(mission.last_contact_heading_degrees == observed_heading, "hidden heading change cannot rotate last observed target")
 	var bright: float = radar.contact_energy()
 	clock.advance(45)
 	var dim: float = radar.contact_energy()

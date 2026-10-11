@@ -5,6 +5,7 @@ func _initialize() -> void:
 
 func _capture() -> void:
 	root.get_node("UserSettings").tutorial_completed = false # Capture named preparation pages independently of local profile.
+	root.get_node("UserSettings").skip_tutorial_by_default = false # Explicit training fixture.
 	var shell: Control = load("res://scenes/main/console_shell.tscn").instantiate()
 	root.add_child(shell)
 	var capture_mode := OS.get_environment("CONSOLE_CAPTURE_MODE")
@@ -20,22 +21,24 @@ func _capture() -> void:
 			trainer.perform("scan")
 			trainer.perform("select")
 		await create_timer(0.7, true).timeout
-	elif capture_mode in ["harbor", "game", "damage", "archive", "fire-control", "fire-archive", "library", "guide-return", "sortie", "flight-nav"]:
+	elif capture_mode in ["harbor", "harbor-east", "game", "damage", "archive", "fire-control", "fire-archive", "library", "guide-return", "sortie", "flight-nav"]:
 		shell.get_node("StartButton").emit_signal("pressed")
 		for step in range(7):
 			if shell.get_node("GameCRTSlot/Preparation").stage == "tutorial":
 				shell.get_node("GameCRTSlot/Preparation").tutorial.skip()
 			shell.get_node("GameCRTSlot/Preparation").advance()
 		var harbor: Control = shell.get_node("GameCRTSlot/Harbor")
-		if capture_mode == "harbor":
+		if capture_mode in ["harbor", "harbor-east"]:
 			harbor.navigation.cast_off()
 			harbor.navigation.set_command(0.0, 6.0)
 			harbor.advance_navigation(30.0)
+			if capture_mode == "harbor-east":
+				harbor.navigation.set_command(90.0, 0.0)
 			harbor.toggle_pause()
 		else:
 			harbor.navigation.cast_off()
 			harbor.navigation.set_command(0.0, 10.0)
-			harbor.advance_navigation(100.0)
+			harbor.advance_navigation(400.0)
 		if capture_mode == "damage":
 			var world: Node = root.get_node("WorldState")
 			var clock: Node = root.get_node("WorldClock")

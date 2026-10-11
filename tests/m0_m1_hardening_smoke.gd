@@ -8,6 +8,7 @@ func _initialize() -> void:
 
 func _run() -> void:
 	root.get_node("UserSettings").tutorial_completed = false # First-run preparation fixture; no persistent write.
+	root.get_node("UserSettings").skip_tutorial_by_default = false # Explicit training fixture.
 	var data: Node = root.get_node("DataManager")
 	for field in ["cruise_speed_knots", "fuel_minutes"]:
 		for invalid in [0.0, -1.0, NAN, INF]:
@@ -112,7 +113,7 @@ func _run() -> void:
 	var harbor: Control = shell.get_node("GameCRTSlot/Harbor")
 	harbor.navigation.cast_off()
 	harbor.navigation.set_command(0, 10)
-	harbor.advance_navigation(100)
+	harbor.advance_navigation(400)
 	var main: Control = shell.get_node("GameCRTSlot").get_child(0)
 	main._button("PhaseActions/Prepare").emit_signal("pressed")
 	_check(main.sortie_configuration.visible and main.sortie_details.text.contains("余油"), "UI shows real sortie data")

@@ -17,7 +17,12 @@ func _ready() -> void:
 
 func _draw() -> void:
 	var extent := minf(pixels, minf(size.x, size.y) - 8) if fit_to_bounds else pixels
-	Glyph.draw(self, size * 0.5, extent, family, tint, size_class, variant, detailed)
+	if show_heading and family.begins_with("ship."):
+		draw_set_transform(size * 0.5, deg_to_rad(heading))
+		Glyph.draw(self, Vector2.ZERO, extent, family, tint, size_class, variant, detailed)
+		draw_set_transform(Vector2.ZERO)
+	else:
+		Glyph.draw(self, size * 0.5, extent, family, tint, size_class, variant, detailed)
 	if show_heading:
 		var direction := Vector2.UP.rotated(deg_to_rad(heading))
 		var tip := size * 0.5 + direction * pixels * 0.56

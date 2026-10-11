@@ -8,6 +8,7 @@ func _initialize() -> void:
 
 func _run() -> void:
 	root.get_node("UserSettings").tutorial_completed = false # First-run preparation fixture; no persistent write.
+	root.get_node("UserSettings").skip_tutorial_by_default = false # Explicit training fixture.
 	var mission: Node = root.get_node("MissionController")
 	var clock: Node = root.get_node("WorldClock")
 	var world: Node = root.get_node("WorldState")
@@ -83,7 +84,7 @@ func _run() -> void:
 	var harbor: Control = shell.get_node("GameCRTSlot/Harbor")
 	harbor.navigation.cast_off()
 	harbor.navigation.set_command(0, 10)
-	harbor.advance_navigation(100)
+	harbor.advance_navigation(400)
 	var main: Control = shell.get_node("GameCRTSlot").get_child(0)
 	_launch(mission, clock)
 	_check(main.radar.flight_navigation and main.radar.own_position_km == mission.aircraft_position_km and not main.radar.sweep_enabled, "cockpit map centers on actual aircraft and separates navigation from ship radar sweep")

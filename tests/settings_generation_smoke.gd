@@ -8,6 +8,7 @@ func _initialize() -> void:
 
 func _run() -> void:
 	root.get_node("UserSettings").tutorial_completed = false # Keep page-count assertions independent of the user's profile.
+	root.get_node("UserSettings").skip_tutorial_by_default = false # Explicit training fixture.
 	var path := "user://qa_preferences_%d.cfg" % Time.get_ticks_usec()
 	var preferences = Preferences.new()
 	preferences.master_volume = 37
@@ -90,7 +91,7 @@ func _run() -> void:
 	var harbor: Control = shell.get_node("GameCRTSlot/Harbor")
 	harbor.navigation.cast_off()
 	harbor.navigation.set_command(0, 10)
-	harbor.advance_navigation(100)
+	harbor.advance_navigation(400)
 	_check(shell.session_stage == "mission" and world.scenario_seed == 270930 and world.map.seed == 270930, "departure retains generated world")
 	await process_frame
 	DirAccess.remove_absolute(path)
