@@ -10,7 +10,9 @@ func _run() -> void:
 	var game_manager: Node = root.get_node("GameManager")
 	var event_bus: Node = root.get_node("EventBus")
 	_check(data_manager.errors.is_empty(), "sample definitions load without errors")
-	_check(data_manager.definitions.size() == 10, "original definitions and five new warship prototypes are indexed")
+	_check(data_manager.definitions.size() == 13, "original ships and three ammunition definitions are indexed")
+	for ammunition_id in ["ammo.ap", "ammo.sap", "ammo.he"]:
+		_check(data_manager.get_definition(ammunition_id) is AmmunitionDefinition, "ammunition resource indexed: " + ammunition_id)
 	_check(data_manager.get_definition("task.first_recon") != null, "task id resolves")
 
 	var bad_definition: Resource = load("res://scripts/data/weapon_definition.gd").new()

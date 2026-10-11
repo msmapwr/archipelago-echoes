@@ -7,6 +7,7 @@ script = ExtResource("1")
 id = "ship.cruiser"
 display_name = "礁影级巡洋舰"
 max_speed_knots = 30.0
+armor_mm = 110.0
 aircraft_ids = PackedStringArray()
 weapon_ids = PackedStringArray("weapon.deck_gun")
 ship_kind = "cruiser"

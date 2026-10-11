@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="AmmunitionDefinition" load_steps=2 format=3]
+[ext_resource type="Script" path="res://scripts/data/ammunition_definition.gd" id="1"]
+[resource]
+script = ExtResource("1")
+id = "ammo.he"
+display_name = "HE 高爆弹"
+damage = 70.0
+penetration_mm = 20.0
+overpenetration_ratio = 1.0

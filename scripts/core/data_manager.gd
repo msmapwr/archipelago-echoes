@@ -11,6 +11,9 @@ const DEFINITION_PATHS: PackedStringArray = [
 	"res://data/ships/submarine.tres",
 	"res://data/aircraft/scout_plane.tres",
 	"res://data/weapons/defensive_gun.tres",
+	"res://data/ammunition/ap.tres",
+	"res://data/ammunition/sap.tres",
+	"res://data/ammunition/he.tres",
 	"res://data/contacts/unknown_vessel.tres",
 	"res://data/tasks/first_recon.tres",
 ]
@@ -90,6 +93,14 @@ func _validate_fields(definition: GameDefinition, source: String) -> bool:
 	var positive_fields: PackedStringArray = []
 	if definition is ShipDefinition:
 		positive_fields = ["max_speed_knots"]
+		if not is_finite(definition.armor_mm) or definition.armor_mm < 0:
+			errors.append("%s: armor_mm must be finite and nonnegative" % source)
+			return false
+	elif definition is AmmunitionDefinition:
+		positive_fields = ["damage", "penetration_mm", "overpenetration_ratio"]
+		if definition.overpenetration_ratio > 1:
+			errors.append("%s: overpenetration_ratio must not exceed one" % source)
+			return false
 	elif definition is AircraftDefinition:
 		positive_fields = ["cruise_speed_knots", "fuel_minutes"]
 	elif definition is WeaponDefinition:

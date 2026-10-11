@@ -21,6 +21,10 @@ static func project(state: Dictionary) -> Dictionary:
 			var impact: Dictionary = state.get("fire_control_impact", {})
 			if impact.get("observed", false) and impact.get("result", "") in ["near_miss", "miss"]:
 				result.fire_control_hint = "上一发未命中；参考弹着偏差，以 50 米步长校射，复测后再射击。"
+			elif impact.get("observed", false) and str(impact.get("armor_outcome", "")).begins_with("未穿透"):
+				result.fire_control_hint = "已命中但未穿透：尝试 AP；切换不重置装填，复测后再射击。"
+			elif impact.get("observed", false) and impact.get("armor_outcome", "") == "过穿":
+				result.fire_control_hint = "薄甲目标发生过穿：尝试 SAP 或 HE，等待装填后再射击。"
 		elif identified and state.get("enemy_alive", true):
 			result.fire_control_hint = "交战为可选操作：选择 A1 → 指派目标 → 甲板炮；指派不会自动开火。"
 	if mode == "campaign_failed":

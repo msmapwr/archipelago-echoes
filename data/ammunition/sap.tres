@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="AmmunitionDefinition" load_steps=2 format=3]
+[ext_resource type="Script" path="res://scripts/data/ammunition_definition.gd" id="1"]
+[resource]
+script = ExtResource("1")
+id = "ammo.sap"
+display_name = "SAP 半穿甲弹"
+damage = 50.0
+penetration_mm = 80.0
+overpenetration_ratio = 1.0

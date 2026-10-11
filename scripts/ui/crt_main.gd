@@ -38,6 +38,7 @@ var selected_contact_id: String = ""
 var aim_mode_button: Button
 var lock_button: Button
 var aim_controls: HBoxContainer
+var ammunition_selector: OptionButton
 var correction_controls: HBoxContainer
 var _next_auto_scan_seconds: float = 30.0
 var _displayed_second: int = -1
@@ -98,6 +99,12 @@ func _build_fire_control_ui() -> void:
 	clear_target_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	clear_target_button.pressed.connect(func() -> void: MissionController.clear_fire_control_target())
 	fire_control_actions.add_child(clear_target_button)
+	ammunition_selector = OptionButton.new()
+	ammunition_selector.name = "Ammunition"
+	ammunition_selector.custom_minimum_size.y = 38
+	for label in ["AP", "SAP", "HE"]: ammunition_selector.add_item(label)
+	ammunition_selector.item_selected.connect(func(index: int) -> void: MissionController.set_ammunition(["ammo.ap", "ammo.sap", "ammo.he"][index]))
+	fire_control_actions.add_child(ammunition_selector)
 	aim_mode_button = Button.new()
 	aim_mode_button.name = "AimMode"
 	aim_mode_button.custom_minimum_size.y = 38
@@ -239,6 +246,7 @@ func guidance_state() -> Dictionary:
 	state.fire_control_motion_ready = MissionController.fire_control_solution().valid
 	state.fire_control_locked = MissionController.fire_control_locked
 	state.fire_control_lock_status = MissionController.lock_status
+	state.fire_control_ammunition = MissionController.selected_ammunition_id
 	state.fire_control_impact = MissionController.last_gun_impact if MissionController.last_gun_impact.get("order_id", "") == MissionController.fire_control_order_id else {}
 	state.enemy_alive = MissionController.enemy_alive
 	return state
@@ -313,6 +321,7 @@ func _archive_fire_control(reason_before_open: String) -> String:
 	lines.insert(2, "瞄准 / " + ("运动提前量" if MissionController.fire_control_aim_mode == "lead" else "最后观测"))
 	lines.insert(3, _motion_description(solution))
 	lines.insert(4, "照射 / " + MissionController.lock_status)
+	lines.insert(5, "下一发 / " + DataManager.get_definition(MissionController.selected_ammunition_id).display_name)
 	var entries: PackedStringArray = []
 	for event in EventBus.history:
 		var kind: String = event.get("kind", "")
@@ -322,6 +331,8 @@ func _archive_fire_control(reason_before_open: String) -> String:
 			if kind == "weapon_fired" and event.details.get("aim_mode", "") == "lead":
 				var aim: Vector2 = event.details.get("aim_position_km", Vector2.ZERO)
 				entries[entries.size() - 1] += "\n  解算快照 / %s · 瞄准 (%.3f, %.3f) km" % [_motion_description(event.details.get("solution", {})), aim.x, aim.y]
+			if kind == "weapon_fired" and event.details.has("ammunition"):
+				entries[entries.size() - 1] += "\n  弹种快照 / %s · 穿甲 %.0f mm" % [event.details.ammunition.label, event.details.ammunition.penetration_mm]
 	for index in range(maxi(0, entries.size() - 40), entries.size()): lines.append(entries[index])
 	return "\n".join(lines)
 
@@ -582,6 +593,9 @@ func _refresh_sortie_configuration() -> void:
 func _refresh_gun_status() -> void:
 	var reason := MissionController.ship_gun_block_reason()
 	fire_control_actions.visible = GameManager.mode == "bridge"
+	ammunition_selector.select(["ammo.ap", "ammo.sap", "ammo.he"].find(MissionController.selected_ammunition_id))
+	ammunition_selector.disabled = not GameManager.player_alive or not GameManager.ship_afloat
+	ammunition_selector.tooltip_text = "下一发弹种：AP 穿重甲，SAP 中轻甲，HE 薄甲。共享有限炮弹配额，切换不重置装填。"
 	aim_mode_button.visible = fire_control_actions.visible
 	aim_controls.visible = fire_control_actions.visible
 	lock_button.text = "解除照射" if MissionController.fire_control_locked else "锁定照射"
@@ -592,6 +606,7 @@ func _refresh_gun_status() -> void:
 		button.disabled = MissionController.fire_control_target_id.is_empty() or not GameManager.ship_afloat or not GameManager.player_alive
 	aim_mode_button.disabled = not GameManager.ship_afloat or not GameManager.player_alive
 	aim_mode_button.text = "瞄准：运动提前量 ↔" if MissionController.fire_control_aim_mode == "lead" else "瞄准：最后观测 ↔"
+	if GameManager.target_identified: ammunition_selector.tooltip_text += "\n型号参考装甲：%.0f mm" % MissionController.enemy_armor_mm()
 	var solution := MissionController.fire_control_solution()
 	aim_mode_button.tooltip_text = _motion_description(solution) + "\n切换不射击、不重置装填；提前量不足时可切回最后观测。"
 	var assignment_reason := MissionController.fire_control_assignment_reason(selected_contact_id)
@@ -601,7 +616,7 @@ func _refresh_gun_status() -> void:
 	var weapon: WeaponDefinition = DataManager.get_definition("weapon.deck_gun") as WeaponDefinition
 	var weapon_range := weapon.range_km if weapon != null else 0.0
 	gun_status.text = "火控 / %s" % ("可开火 · %.0f km / 前向 ±%.0f°" % [weapon_range, MissionController.GUN_HALF_ARC_DEGREES] if reason.is_empty() else reason)
-	gun_status.text = ("甲板炮 → A1 / " + MissionController.fire_control_order_id if not MissionController.fire_control_target_id.is_empty() else "甲板炮 / 未指派") + "\n" + gun_status.text
+	gun_status.text = ("甲板炮 → A1 / " + MissionController.fire_control_order_id if not MissionController.fire_control_target_id.is_empty() else "甲板炮 / 未指派") + " · " + MissionController.selected_ammunition_id.trim_prefix("ammo.").to_upper() + "\n" + gun_status.text
 	gun_status.text += "\n" + (MissionController.lock_status + " · " if MissionController.fire_control_locked or MissionController.lock_status.begins_with("失锁") else "") + _motion_description(solution)
 	gun_status.text += "\n修正 %.0f m · %s" % [MissionController.fire_control_correction_km.length() * 1000, "炮弹飞行中 / %.1f 秒" % maxf(0, MissionController.projectiles[0].impact_seconds - WorldClock.elapsed_seconds) if not MissionController.projectiles.is_empty() else _impact_description(MissionController.last_gun_impact)]
 	gun_status.add_theme_color_override("font_color", Color("#83e8aa") if reason.is_empty() else Color("#e8b968"))
@@ -617,7 +632,7 @@ func _impact_description(impact: Dictionary) -> String:
 	if impact.is_empty(): return "尚无弹着"
 	if not impact.get("observed", false): return "弹着结果未观测"
 	var error: Vector2 = impact.get("error_km", Vector2.ZERO)
-	return "%s / %.0f m · E %.0f / N %.0f" % [{"hit":"命中", "near_miss":"近失弹", "miss":"未命中"}.get(impact.get("result", ""), "弹着"), impact.get("error_meters", 0), error.x * 1000, -error.y * 1000]
+	return "%s / %.0f m · E %.0f / N %.0f" % [{"hit":"命中", "near_miss":"近失弹", "miss":"未命中"}.get(impact.get("result", ""), "弹着"), impact.get("error_meters", 0), error.x * 1000, -error.y * 1000] + (" · %s %.1f" % [impact.armor_outcome, impact.damage] if impact.has("armor_outcome") else "")
 
 func _motion_description(solution: Dictionary) -> String:
 	if not solution.get("valid", false):
@@ -710,6 +725,7 @@ func _on_event_recorded(_event: Dictionary) -> void:
 func _event_line(event: Dictionary) -> String:
 	var details_data: Dictionary = event.get("details", {})
 	match event.get("kind", ""):
+		"fire_control_ammunition_changed": return "下一发换弹 / %s · %s" % [str(details_data.get("ammunition_id", "")).trim_prefix("ammo.").to_upper(), details_data.get("order_id", "")]
 		"fire_control_locked": return "锁定照射 / " + str(details_data.get("order_id", ""))
 		"fire_control_lock_lost": return "照射终止 / %s · %s" % [details_data.get("order_id", ""), details_data.get("reason", "")]
 		"gun_projectile_impact": return "甲板炮弹着 / %s · %s · %s" % [details_data.get("shot_id", ""), details_data.get("order_id", ""), _impact_description(details_data)]

@@ -27,6 +27,7 @@ var last_contact_range_km: float = 0.0
 var last_contact_seconds: float = 0.0
 var last_contact_heading_degrees: float = 0.0
 var fire_control_aim_mode: String = "observed"
+var selected_ammunition_id := "ammo.sap"
 const LOCK_MEMORY_SECONDS := 8.0
 const TURRET_RATE_DEGREES := 20.0
 var fire_control_locked := false
@@ -101,6 +102,7 @@ func _initialize_scenario() -> void:
 	last_contact_seconds = 0.0
 	last_contact_heading_degrees = 0.0
 	fire_control_aim_mode = "observed"
+	selected_ammunition_id = "ammo.sap"
 	fire_control_locked = false
 	turret_heading_degrees = WorldState.ship_heading_degrees
 	lock_status = "未锁定"
@@ -309,11 +311,12 @@ func fire_ship_gun(contact_id: String = "") -> bool:
 	aim += fire_control_correction_km
 	var weapon: WeaponDefinition = DataManager.get_definition("weapon.deck_gun") as WeaponDefinition
 	var flight_seconds := maxf(0.1, WorldState.ship_position_km.distance_to(aim) / weapon.projectile_speed_km_per_second)
+	var ammunition := DataManager.get_definition(selected_ammunition_id) as AmmunitionDefinition
 	_shot_sequence += 1
 	var shot := {"shot_id": "deck_gun.%03d" % _shot_sequence, "order_id": fire_control_order_id, "target_id": target,
 		"origin_km": WorldState.ship_position_km, "aim_position_km": aim, "aim_mode": fire_control_aim_mode,
 		"correction_km": fire_control_correction_km, "locked": fire_control_locked, "turret_heading_degrees": turret_heading_degrees, "fired_seconds": WorldClock.elapsed_seconds,
-		"impact_seconds": WorldClock.elapsed_seconds + flight_seconds, "flight_seconds": flight_seconds}
+		"impact_seconds": WorldClock.elapsed_seconds + flight_seconds, "flight_seconds": flight_seconds, "ammunition": ammunition.snapshot()}
 	projectiles.append(shot.duplicate(true))
 	projectiles.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.impact_seconds < b.impact_seconds)
 	ship_ammo -= 1
@@ -441,6 +444,22 @@ func set_fire_control_aim_mode(value: String) -> bool:
 	state_changed.emit()
 	return _accept(("提前量瞄准：运动解算已就绪" if fire_control_solution().valid else "提前量瞄准：等待有效运动解算") if value == "lead" else "最后观测瞄准：不补偿目标运动")
 
+func set_ammunition(ammunition_id: String) -> bool:
+	if GameManager.mode != "bridge" or not GameManager.player_alive or not GameManager.ship_afloat or ammunition_id not in ["ammo.ap", "ammo.sap", "ammo.he"]:
+		EventBus.record("fire_control_rejected", {"action": "ammunition", "order_id": fire_control_order_id, "reason": "弹种无效或无舰桥指挥权"})
+		return _reject("弹种无效或无舰桥指挥权")
+	if ammunition_id == selected_ammunition_id: return true
+	selected_ammunition_id = ammunition_id
+	EventBus.record("fire_control_ammunition_changed", {"ammunition_id": ammunition_id, "order_id": fire_control_order_id, "queued": get_tree().paused})
+	EventBus.command_issued.emit("deck_gun.ammunition." + ammunition_id)
+	state_changed.emit()
+	return _accept("下一发使用 %s；换弹不刷新装填，不改变已发射炮弹" % (DataManager.get_definition(ammunition_id).display_name))
+
+func enemy_armor_mm() -> float:
+	var contact := DataManager.get_definition(CONTACT_ID) as ContactDefinition
+	var ship := DataManager.get_definition(contact.identified_ship_id) as ShipDefinition
+	return ship.armor_mm
+
 func fire_control_solution() -> Dictionary:
 	if not radar_emitting or not contact_visible or not enemy_alive or not GameManager.ship_afloat or not GameManager.player_alive or GameManager.mode in ["settlement", "campaign_failed"] or not GameManager.target_identified:
 		return {"valid": false, "reason": "运动解算不可用：需要已识别的有效雷达接触"}
@@ -481,9 +500,14 @@ func _advance_gun_projectiles(delta: float, total_seconds: float, observer_origi
 		if observed:
 			last_gun_impact.error_km = error
 			last_gun_impact.error_meters = error.length() * 1000
+		var damage_result := AmmunitionDefinition.resolve(shot.ammunition, enemy_armor_mm()) if hit else {"damage": 0.0, "outcome": "未命中"}
+		last_gun_impact.ammunition_id = shot.ammunition.id
+		if observed and hit:
+			last_gun_impact.damage = damage_result.damage
+			last_gun_impact.armor_outcome = damage_result.outcome
 		EventBus.record("gun_projectile_impact", last_gun_impact, cursor)
 		if hit:
-			_damage_enemy(GUN_DAMAGE, "deck_gun" if observed else "deck_gun_unobserved", cursor)
+			_damage_enemy(damage_result.damage, "deck_gun" if observed else "deck_gun_unobserved", cursor)
 		_feedback("甲板炮命中 A1" if observed and hit else "近失弹：偏差 %.0f 米，可修正下一发" % (error.length() * 1000) if observed and result == "near_miss" else "炮弹未命中：偏差 %.0f 米" % (error.length() * 1000) if observed else "炮弹已到达，结果未观测；重新扫描")
 	_advance_enemy(maxf(0, total_seconds - cursor))
 
