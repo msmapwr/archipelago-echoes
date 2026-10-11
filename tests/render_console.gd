@@ -21,7 +21,7 @@ func _capture() -> void:
 			trainer.perform("scan")
 			trainer.perform("select")
 		await create_timer(0.7, true).timeout
-	elif capture_mode in ["harbor", "harbor-east", "game", "damage", "archive", "fire-control", "fire-archive", "library", "guide-return", "sortie", "flight-nav"]:
+	elif capture_mode in ["harbor", "harbor-east", "game", "damage", "archive", "fire-control", "fire-archive", "lead-control", "lead-archive", "library", "guide-return", "sortie", "flight-nav"]:
 		shell.get_node("StartButton").emit_signal("pressed")
 		for step in range(7):
 			if shell.get_node("GameCRTSlot/Preparation").stage == "tutorial":
@@ -58,7 +58,7 @@ func _capture() -> void:
 			shell.get_node("GameCRTSlot").get_child(0)._refresh_ui()
 		if capture_mode == "archive":
 			shell.get_node("GameCRTSlot").get_child(0).toggle_archive()
-		if capture_mode in ["fire-control", "fire-archive"]:
+		if capture_mode in ["fire-control", "fire-archive", "lead-control", "lead-archive"]:
 			var main: Control = shell.get_node("GameCRTSlot").get_child(0)
 			var mission: Node = root.get_node("MissionController")
 			var world: Node = root.get_node("WorldState")
@@ -69,7 +69,11 @@ func _capture() -> void:
 			mission.identify_contact()
 			main._on_contact_selected(mission.CONTACT_ID)
 			main.assign_target_button.emit_signal("pressed")
-			if capture_mode == "fire-archive":
+			if capture_mode in ["lead-control", "lead-archive"]:
+				root.get_node("WorldClock").advance(30)
+				mission.scan()
+				mission.set_fire_control_aim_mode("lead")
+			if capture_mode in ["fire-archive", "lead-archive"]:
 				main._button("RadarActions/Fire").emit_signal("pressed")
 				main.toggle_archive()
 				main.archive.select_tab(3)

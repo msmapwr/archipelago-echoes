@@ -26,6 +26,8 @@ var last_contact_bearing_degrees: float = 0.0
 var last_contact_range_km: float = 0.0
 var last_contact_seconds: float = 0.0
 var last_contact_heading_degrees: float = 0.0
+var fire_control_aim_mode: String = "observed"
+var _motion = preload("res://scripts/core/fire_control_solution.gd").new()
 
 var ship_health: float = 100.0
 var ship_ammo: int = 6
@@ -86,6 +88,8 @@ func _initialize_scenario() -> void:
 	last_contact_range_km = 0.0
 	last_contact_seconds = 0.0
 	last_contact_heading_degrees = 0.0
+	fire_control_aim_mode = "observed"
+	_motion.reset()
 	ship_health = 100.0
 	ship_ammo = 6
 	next_ship_fire_seconds = 0.0
@@ -133,6 +137,7 @@ func scan() -> bool:
 	var range_km := WorldState.contact_range_km()
 	contact_visible = enemy_alive and range_km <= SCAN_RANGE_KM and WorldState.map.can_navigate_segment(WorldState.ship_position_km, WorldState.contact_position_km)
 	if not contact_visible:
+		_motion.reset()
 		if was_visible:
 			EventBus.contact_lost.emit(CONTACT_ID)
 			EventBus.record("contact_lost", {"id": CONTACT_ID})
@@ -144,6 +149,7 @@ func scan() -> bool:
 	last_contact_range_km = range_km
 	last_contact_seconds = WorldClock.elapsed_seconds
 	last_contact_heading_degrees = enemy_heading_degrees
+	_motion.observe(last_contact_position_km, last_contact_seconds)
 	var kind := "contact_updated" if was_visible else "contact_discovered"
 	if was_visible:
 		EventBus.contact_updated.emit(CONTACT_ID)
@@ -161,6 +167,8 @@ func set_radar_emitting(is_enabled: bool) -> bool:
 	if radar_emitting == is_enabled:
 		return _reject("雷达状态未改变")
 	radar_emitting = is_enabled
+	if not is_enabled:
+		_motion.reset()
 	EventBus.record("radar_emission_changed", {"emitting": radar_emitting})
 	if radar_emitting:
 		var found := scan()
@@ -262,11 +270,13 @@ func fire_ship_gun(contact_id: String = "") -> bool:
 	if not reason.is_empty():
 		EventBus.record("ship_gun_rejected", {"weapon_id": "weapon.deck_gun", "target_id": target, "order_id": fire_control_order_id, "reason": reason})
 		return _reject(reason)
+	var solution := fire_control_solution()
+	var aim: Vector2 = solution.aim_position_km if fire_control_aim_mode == "lead" else last_contact_position_km
 	ship_ammo -= 1
 	next_ship_fire_seconds = WorldClock.elapsed_seconds + 30.0
 	enemy_alert_until_seconds = maxf(enemy_alert_until_seconds, WorldClock.elapsed_seconds + TRACK_MEMORY_SECONDS)
 	EventBus.weapon_fired.emit("weapon.deck_gun")
-	EventBus.record("weapon_fired", {"weapon_id": "weapon.deck_gun", "target_id": target, "order_id": fire_control_order_id, "observation_seconds": last_contact_seconds, "aim_position_km": last_contact_position_km, "ammo_remaining": ship_ammo})
+	EventBus.record("weapon_fired", {"weapon_id": "weapon.deck_gun", "target_id": target, "order_id": fire_control_order_id, "observation_seconds": last_contact_seconds, "aim_position_km": aim, "aim_mode": fire_control_aim_mode, "solution": solution.duplicate(true), "ammo_remaining": ship_ammo})
 	_damage_enemy(GUN_DAMAGE, "deck_gun")
 	state_changed.emit()
 	return _accept("甲板炮命中 A1，目标损伤 %.0f%%" % (100.0 - enemy_health))
@@ -295,16 +305,40 @@ func ship_gun_block_reason(contact_id: String = "") -> String:
 	var weapon: WeaponDefinition = DataManager.get_definition("weapon.deck_gun") as WeaponDefinition
 	if WorldClock.elapsed_seconds - last_contact_seconds > 45.0:
 		return "接触情报已过期，请重新扫描"
-	if weapon == null or WorldState.ship_position_km.distance_to(last_contact_position_km) > weapon.range_km:
-		return "最后观测目标超出甲板炮射程"
-	var relative := last_contact_position_km - WorldState.ship_position_km
+	var aim := last_contact_position_km
+	if fire_control_aim_mode == "lead":
+		var solution := fire_control_solution()
+		if not solution.valid:
+			return solution.reason
+		aim = solution.aim_position_km
+	if weapon == null or WorldState.ship_position_km.distance_to(aim) > weapon.range_km:
+		return "提前量瞄准点超出甲板炮射程" if fire_control_aim_mode == "lead" else "最后观测目标超出甲板炮射程"
+	var relative := aim - WorldState.ship_position_km
 	var bearing := rad_to_deg(atan2(relative.x, -relative.y))
 	var bearing_error := absf(wrapf(bearing - WorldState.ship_heading_degrees, -180.0, 180.0))
 	if bearing_error > GUN_HALF_ARC_DEGREES:
 		return "目标在甲板炮射界外：调整舰艏朝向 A1"
-	if not WorldState.map.can_navigate_segment(WorldState.ship_position_km, last_contact_position_km):
+	if not WorldState.map.can_navigate_segment(WorldState.ship_position_km, aim):
 		return "岛屿遮挡射线"
 	return ""
+
+func set_fire_control_aim_mode(value: String) -> bool:
+	if value not in ["observed", "lead"] or GameManager.mode != "bridge" or not GameManager.player_alive or not GameManager.ship_afloat:
+		EventBus.record("fire_control_rejected", {"action": "aim_mode", "reason": "瞄准模式无效或无舰桥指挥权", "order_id": fire_control_order_id})
+		return _reject("瞄准模式无效或无舰桥指挥权")
+	if value == fire_control_aim_mode:
+		return true
+	fire_control_aim_mode = value
+	EventBus.record("fire_control_aim_mode_changed", {"aim_mode": value, "weapon_id": "weapon.deck_gun", "target_id": fire_control_target_id, "order_id": fire_control_order_id, "queued": get_tree().paused})
+	EventBus.command_issued.emit("deck_gun.aim." + value)
+	state_changed.emit()
+	return _accept(("提前量瞄准：运动解算已就绪" if fire_control_solution().valid else "提前量瞄准：等待有效运动解算") if value == "lead" else "最后观测瞄准：不补偿目标运动")
+
+func fire_control_solution() -> Dictionary:
+	if not radar_emitting or not contact_visible or not enemy_alive or not GameManager.ship_afloat or not GameManager.player_alive or GameManager.mode in ["settlement", "campaign_failed"] or not GameManager.target_identified:
+		return {"valid": false, "reason": "运动解算不可用：需要已识别的有效雷达接触"}
+	var weapon: WeaponDefinition = DataManager.get_definition("weapon.deck_gun") as WeaponDefinition
+	return _motion.solve(WorldState.ship_position_km, WorldClock.elapsed_seconds, weapon.projectile_speed_km_per_second if weapon != null else 0.0)
 
 func start_damage_control() -> bool:
 	if GameManager.mode != "bridge" or not GameManager.ship_afloat:

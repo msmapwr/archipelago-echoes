@@ -42,6 +42,11 @@ var airfield_position_km: Vector2 = Vector2.ZERO
 var navigation_target_km: Vector2 = Vector2.ZERO
 var navigation_target_visible: bool = false
 var _keyboard_offset_km: Vector2 = Vector2.ZERO
+var _fire_control_prediction: Dictionary = {}
+
+func set_fire_control_prediction(solution: Dictionary) -> void:
+	_fire_control_prediction = solution.duplicate(true)
+	queue_redraw()
 
 func set_flight_navigation(enabled: bool, carrier: Vector2, afloat: bool, airfield: Vector2, solution: Dictionary) -> void:
 	if flight_navigation != enabled:
@@ -189,6 +194,7 @@ func _draw() -> void:
 	if flight_navigation:
 		_draw_navigation(center, radius)
 	_draw_contact(center, radius)
+	_draw_prediction(center, radius)
 	_draw_readout(center, radius)
 	if hull_integrity < 50.0:
 		draw_arc(center, radius - 4.0, deg_to_rad(113.0), deg_to_rad(183.0), 32, Color("#8d5e3b"), 3.0, true)
@@ -359,6 +365,21 @@ func _draw_contact(_center: Vector2, _radius: float) -> void:
 	draw_line(point + Vector2(-19, -19), point + Vector2(-19, -11), Color(tint, strength))
 	if contact_confirmed or contact_selected_state:
 		draw_string(ThemeDB.fallback_font, point + Vector2(21, -8), "A1 / TRACK" if contact_confirmed else "A1 / SELECTED", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, tint)
+
+func _draw_prediction(center: Vector2, radius: float) -> void:
+	if flight_navigation or not fire_control_assigned or not contact_visible or not contact_confirmed or not _fire_control_prediction.get("valid", false):
+		return
+	var aim: Vector2 = _fire_control_prediction.aim_position_km
+	var offset := aim - own_position_km
+	if offset.length() > display_range_km:
+		return
+	var point := center + offset * radius / display_range_km
+	var tint := Color(AMBER, contact_energy())
+	draw_dashed_line(_contact_position(), point, tint, 1, 3)
+	draw_line(point + Vector2(-6, -6), point + Vector2(6, 6), tint)
+	draw_line(point + Vector2(-6, 6), point + Vector2(6, -6), tint)
+	var label_offset := Vector2(-96 if point.x > center.x else 14, 42)
+	draw_string(ThemeDB.fallback_font, point + label_offset, "LEAD +%.1fs" % _fire_control_prediction.flight_seconds, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, tint)
 
 func _draw_readout(center: Vector2, radius: float) -> void:
 	var font := ThemeDB.fallback_font

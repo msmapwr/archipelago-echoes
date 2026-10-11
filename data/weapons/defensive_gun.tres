@@ -7,3 +7,4 @@ script = ExtResource("1")
 id = "weapon.deck_gun"
 display_name = "甲板防卫炮"
 range_km = 12.0
+projectile_speed_km_per_second = 0.8

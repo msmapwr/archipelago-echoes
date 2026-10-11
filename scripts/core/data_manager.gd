@@ -93,7 +93,7 @@ func _validate_fields(definition: GameDefinition, source: String) -> bool:
 	elif definition is AircraftDefinition:
 		positive_fields = ["cruise_speed_knots", "fuel_minutes"]
 	elif definition is WeaponDefinition:
-		positive_fields = ["range_km"]
+		positive_fields = ["range_km", "projectile_speed_km_per_second"]
 	elif definition is ContactDefinition:
 		positive_fields = ["range_km"]
 		if not is_finite(definition.bearing_degrees) or definition.bearing_degrees < 0 or definition.bearing_degrees >= 360:
