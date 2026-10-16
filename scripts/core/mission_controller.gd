@@ -91,9 +91,11 @@ var _fuel_warning_level: int = 0
 var airfield_position_km: Vector2 = Vector2.ZERO
 
 var last_message: String = "系统待命"
+var ship_loss_cause: String = ""
 var _last_clock_seconds: float = 0.0
 
 func _ready() -> void:
+	WorldState.navigation_impact.connect(apply_navigation_damage)
 	WorldClock.time_advanced.connect(_on_world_time_advanced)
 	EventBus.mode_changed.connect(_on_fire_control_mode_changed)
 	EventBus.event_recorded.connect(_on_fire_control_event)
@@ -136,6 +138,7 @@ func _initialize_scenario() -> void:
 	_shot_sequence = 0
 	_last_tick_ship_position = WorldState.ship_position_km
 	ship_health = 100.0
+	ship_loss_cause = ""
 	fire_control_target_id = ""
 	fire_control_order_id = ""
 	_fire_control_sequence = 0
@@ -863,7 +866,8 @@ func _on_world_time_advanced(total_seconds: float) -> void:
 		var waiting := minf(delta, switch_seconds_remaining)
 		switch_seconds_remaining -= waiting
 		flight_delta -= waiting
-		if switch_seconds_remaining <= 0.0:
+		if switch_seconds_remaining <= 0.000001:
+			switch_seconds_remaining = 0.0
 			_start_flight()
 	if aircraft_airborne and flight_delta > 0.0:
 		_advance_aircraft(flight_delta)
@@ -901,6 +905,19 @@ func _enemy_attack(total_seconds: float) -> void:
 	EventBus.damage_reported.emit(SHIP_ID)
 	EventBus.record("ship_damaged", {"health": ship_health, "source": CONTACT_ID})
 	_feedback("母舰遭到还击，舰体 %.0f%%" % ship_health)
+	_check_ship_sunk()
+
+func apply_navigation_damage(impact: Dictionary) -> void:
+	if not GameManager.ship_afloat or GameManager.mode in ["settlement", "campaign_failed"]: return
+	ship_health = maxf(0, ship_health - float(impact.get("damage", 0)))
+	ship_loss_cause = "触礁撞毁" if ship_health <= 0 else ""
+	EventBus.damage_reported.emit(SHIP_ID)
+	EventBus.record("ship_damaged", {"health":ship_health, "source":impact.get("kind", "grounding"), "impact":impact})
+	_feedback("触礁撞毁" if ship_health <= 0 else "触浅 / 碰撞：舰体 %.0f%%；低速转向深水脱浅，可投入损管。" % ship_health)
+	_check_ship_sunk()
+	state_changed.emit()
+
+func _check_ship_sunk() -> void:
 	if ship_health <= 0.0:
 		_clear_fire_control("ship_sunk")
 		WorldState.set_ship_command(WorldState.ship_heading_degrees, 0.0)

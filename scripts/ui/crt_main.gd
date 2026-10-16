@@ -53,6 +53,7 @@ var sortie_details: Label
 var standby_checkbox: CheckBox
 var standby_button: Button
 var cancel_return_button: Button
+var under_keel: Label
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -61,6 +62,7 @@ func _ready() -> void:
 	_build_sortie_ui()
 	_build_unit_library()
 	_build_fire_control_ui()
+	_build_navigation_readout()
 	_connect_buttons()
 	radar.contact_selected.connect(_on_contact_selected)
 	radar.contact_deselected.connect(_on_contact_deselected)
@@ -144,6 +146,18 @@ func _build_fire_control_ui() -> void:
 		correction_controls.add_child(button)
 	# Keep combat commands visible before the optional full structural preview.
 	details.move_child(contact_icon, correction_controls.get_index() + 1)
+
+func _build_navigation_readout() -> void:
+	under_keel = Label.new()
+	under_keel.mouse_filter = Control.MOUSE_FILTER_PASS
+	under_keel.position = Vector2(12, 8)
+	under_keel.add_theme_font_size_override("font_size", 15)
+	radar.add_child(under_keel)
+	terminal.get_node("Header/Brand").add_theme_font_size_override("font_size", 19)
+	contact_status.add_theme_font_size_override("font_size", 23)
+	for label in [contact_details, selection_details, ship_details, flight_details]: label.add_theme_font_size_override("font_size", 18)
+	mission_status.add_theme_color_override("font_color", Color("#738f7b"))
+	contact_icon.custom_minimum_size.y = 90
 
 func _build_unit_library() -> void:
 	library_shade = ColorRect.new()
@@ -261,6 +275,9 @@ func guidance_state() -> Dictionary:
 	state.fire_control_impact = MissionController.last_gun_impact if MissionController.last_gun_impact.get("order_id", "") == MissionController.fire_control_order_id else {}
 	state.enemy_alive = MissionController.enemy_alive
 	state.contact_maneuver = MissionController.contact_maneuver_status()
+	state.navigation_warning = WorldState.navigation_risk().warning
+	state.navigation_grounded = WorldState.ship_grounded
+	state.navigation_loss = MissionController.ship_loss_cause
 	return state
 
 func _refresh_guidance() -> void:
@@ -268,9 +285,9 @@ func _refresh_guidance() -> void:
 	objective_title.text = "当前目标 / " + guidance.title
 	objective_hint.text = guidance.next
 	if not guidance.warning.is_empty():
-		objective_hint.text = guidance.warning + "  " + guidance.next
-	if not guidance.fire_control_hint.is_empty():
-		objective_hint.text += "\n" + guidance.fire_control_hint
+		objective_hint.text = guidance.warning
+	objective_hint.tooltip_text = guidance.next + "\n" + guidance.fire_control_hint
+	objective_hint.add_theme_font_size_override("font_size", 17)
 	objective_hint.add_theme_color_override("font_color", Color("#e8b968") if not guidance.warning.is_empty() else Color("#a2c0a9"))
 
 func toggle_archive() -> void:
@@ -387,8 +404,8 @@ func _connect_buttons() -> void:
 	_button("RadarActions/Fire").pressed.connect(func() -> void: MissionController.fire_ship_gun())
 	_button("ShipControls/HeadingControls/TurnPort").pressed.connect(func() -> void: MissionController.command_ship(WorldState.ship_heading_degrees - 15.0, WorldState.ship_speed_knots))
 	_button("ShipControls/HeadingControls/TurnStarboard").pressed.connect(func() -> void: MissionController.command_ship(WorldState.ship_heading_degrees + 15.0, WorldState.ship_speed_knots))
-	_button("ShipControls/SpeedControls/SlowDown").pressed.connect(func() -> void: MissionController.command_ship(WorldState.ship_heading_degrees, maxf(0.0, WorldState.ship_speed_knots - 5.0)))
-	_button("ShipControls/SpeedControls/SpeedUp").pressed.connect(func() -> void: MissionController.command_ship(WorldState.ship_heading_degrees, minf(WorldState.ship_max_speed_knots, WorldState.ship_speed_knots + 5.0)))
+	_button("ShipControls/SpeedControls/SlowDown").pressed.connect(func() -> void: MissionController.command_ship(WorldState.ship_heading_degrees, maxf(0.0, WorldState.ship_speed_knots - WorldState.navigation_speed_step())))
+	_button("ShipControls/SpeedControls/SpeedUp").pressed.connect(func() -> void: MissionController.command_ship(WorldState.ship_heading_degrees, minf(WorldState.navigation_speed_limit(), WorldState.ship_speed_knots + WorldState.navigation_speed_step())))
 	_button("ShipControls/DamageControl/Repair").pressed.connect(func() -> void: MissionController.start_damage_control())
 	_button("FlightControls/FlightHeadingControls/FlightPort").pressed.connect(func() -> void: MissionController.set_aircraft_heading(MissionController.aircraft_heading_degrees - 15.0))
 	_button("FlightControls/FlightHeadingControls/FlightStarboard").pressed.connect(func() -> void: MissionController.set_aircraft_heading(MissionController.aircraft_heading_degrees + 15.0))
@@ -421,12 +438,12 @@ func _apply_theme() -> void:
 	var terminal_font := SystemFont.new()
 	terminal_font.font_names = PackedStringArray(["Consolas", "Cascadia Mono", "Microsoft YaHei"])
 	ui_theme.default_font = terminal_font
-	ui_theme.default_font_size = 16
+	ui_theme.default_font_size = 18
 	ui_theme.set_color("font_color", "Button", Color("#c3d9c3"))
 	ui_theme.set_color("font_hover_color", "Button", Color("#eff9e8"))
 	ui_theme.set_color("font_pressed_color", "Button", Color("#07140e"))
 	ui_theme.set_color("font_disabled_color", "Button", Color("#6f8474"))
-	ui_theme.set_font_size("font_size", "Button", 17)
+	ui_theme.set_font_size("font_size", "Button", 18)
 	ui_theme.set_stylebox("normal", "Button", _button_style(Color("#152720"), Color("#4a6e58")))
 	ui_theme.set_stylebox("hover", "Button", _button_style(Color("#28513a"), Color("#a5efb2")))
 	ui_theme.set_stylebox("pressed", "Button", _button_style(Color("#8be6a3"), Color("#8be6a3")))
@@ -598,7 +615,10 @@ func _refresh_ui() -> void:
 	cancel_return_button.disabled = get_tree().paused
 	cancel_return_button.visible = mode == "returning"
 	standby_button.disabled = not GameManager.ship_afloat or WorldState.ship_speed_knots == 0.0
-	pause_status.text = "已暂停 · 点击继续" if get_tree().paused else "运行中 · 空格暂停"
+	var ended := mode in ["settlement", "campaign_failed"]
+	pause_status.text = "行动结束 · 保持暂停" if ended else "已暂停 · 点击继续" if get_tree().paused else "运行中 · 空格暂停"
+	pause_status.disabled = ended or archive.visible or unit_library.visible
+	time_scale_button.disabled = pause_status.disabled
 	time_scale_button.text = "时间 ×%.0f" % WorldClock.time_scale
 	radar_range_button.text = "量程 %.1f km" % radar.display_range_km
 	action_status.text = MissionController.last_message
@@ -703,6 +723,20 @@ func _refresh_contact() -> void:
 	selection_details.text = "雷达静默 · 开机后可复测接触" if not MissionController.radar_emitting else ("已选择 A1 · 确认身份后可指派甲板炮目标" if selected_contact_id == MissionController.CONTACT_ID else "未选择接触 · 点击雷达回波")
 
 func _refresh_ship() -> void:
+	var risk: Dictionary = WorldState.navigation_risk()
+	_button("ShipControls/SpeedControls/SpeedUp").text = "加速 %.0f kn" % WorldState.navigation_speed_step()
+	_button("ShipControls/SpeedControls/SlowDown").text = "减速 %.0f kn" % WorldState.navigation_speed_step()
+	# Put recovery controls ahead of optional combat when navigation needs attention.
+	var preceding: Control = mission_status if not risk.warning.is_empty() and GameManager.mode == "bridge" else contact_icon
+	var desired_index := preceding.get_index() + (0 if ship_controls.get_index() < preceding.get_index() else 1)
+	if ship_controls.get_index() != desired_index: details.move_child(ship_controls, desired_index)
+	under_keel.text = "水深 %.1f m  /  吃水 %.1f m" % [risk.depth_m, WorldState.ship_draft_m]
+	if WorldState.ship_grounded:
+		under_keel.text = "触浅 %.2f m  /  吃水 %.1f m" % [WorldState.last_navigation_impact.get("depth_m", risk.depth_m), WorldState.ship_draft_m]
+	under_keel.tooltip_text = "当前船位水深 %.2f m；触浅时显示事故处水深，船位停在危险前的安全采样点。" % risk.depth_m
+	under_keel.add_theme_color_override("font_color", Color("#e8b968") if not risk.warning.is_empty() else Color("#8faf9a"))
+	if not risk.warning.is_empty(): navigation_status.text = risk.warning
+	elif "搁浅" in navigation_status.text or "警报" in navigation_status.text or "海图边界" in navigation_status.text: navigation_status.text = "航道可用 · 请保持安全余深"
 	ship_details.text = "航向 %03d°   航速 %.0f / %.0f kn   舰体 %.0f%%\n位置 E %05.1f / S %05.1f km   弹药 %d" % [roundi(WorldState.ship_heading_degrees), WorldState.ship_speed_knots, WorldState.ship_max_speed_knots, MissionController.ship_health, WorldState.ship_position_km.x, WorldState.ship_position_km.y, MissionController.total_ship_ammo()]
 	radar.set_ship_heading(WorldState.ship_heading_degrees)
 	var repairing := MissionController.repair_seconds_remaining > 0.0
@@ -781,6 +815,12 @@ func _event_line(event: Dictionary) -> String:
 		"target_identified", "aircraft_recon": return "A1 情报确认"
 		"ship_navigation_command": return "航行命令 %03d° / %.0f kn" % [roundi(details_data.get("heading_degrees", 0.0)), details_data.get("speed_knots", 0.0)]
 		"ship_navigation_blocked": return "航路受阻，舰艇停车"
+		"ship_grounded": return "母舰搁浅 · 触浅水深 %.1f m · 航速 %.0f kn" % [details_data.get("depth_m", 0), details_data.get("speed_knots", 0)]
+		"ship_collision": return "母舰碰撞岸线 · 航速 %.0f kn" % details_data.get("speed_knots", 0)
+		"ship_refloated": return "母舰已脱浅，驶回深水"
+		"ship_navigation_rejected": return details_data.get("reason", "航行命令被拒绝")
+		"navigation_warning_changed": return "航行预警 / " + details_data.get("warning", "") if not str(details_data.get("warning", "")).is_empty() else "航行预警已解除"
+		"harbor_navigation_impact": return "港内触浅 / 碰撞 · 舰体 %.0f%% · P+%.0f 秒" % [details_data.get("hull", 0), details_data.get("harbor_seconds", 0)]
 		"weapon_fired": return "飞机对海投弹" if details_data.get("weapon_id", "") == "aircraft.bomb" else "甲板炮射击 A1 / %s · %s · %s · 余弹 %d" % [details_data.get("mount_id", "fore"), details_data.get("order_id", ""), "运动提前量" if details_data.get("aim_mode", "observed") == "lead" else "最后观测", details_data.get("ammo_remaining", 0)]
 		"aircraft_attack": return "飞机对海攻击 A1"
 		"enemy_damaged": return "战斗结果尚未观测" if details_data.get("source", "") == "deck_gun_unobserved" else "A1 受损 %.0f%%" % (100.0 - details_data.get("health", 100.0))

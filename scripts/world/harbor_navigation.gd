@@ -6,6 +6,7 @@ const EXIT_Y_KM := -1.28
 const EXIT_HALF_WIDTH_KM := 0.32
 const WATER_BOUNDS := Rect2(-1.0, -1.44, 2.0, 1.76)
 const OBSTACLES: Array[Rect2] = [Rect2(-1.0, -0.48, 0.68, 0.8), Rect2(0.32, -0.80, 0.68, 0.32)]
+const Hazards = preload("res://scripts/world/navigation_hazards.gd")
 
 var position_km := Vector2.ZERO
 var heading_degrees: float = 0.0
@@ -14,15 +15,38 @@ var elapsed_seconds: float = 0.0
 var moored: bool = true
 var departed: bool = false
 var message: String = "命令已接收。先解缆，再沿中央航道向北驶出。"
+var map_seed := 270928
+var hull := 100.0
+var grounded := false
+var failed := false
+var impacts: Array[Dictionary] = []
+
+static func depth_at(point: Vector2, chart_seed: int = 270928) -> float:
+	if not WATER_BOUNDS.has_point(point): return 0.0
+	var distance := minf(point.x - WATER_BOUNDS.position.x, WATER_BOUNDS.end.x - point.x)
+	distance = minf(distance, WATER_BOUNDS.end.y - point.y)
+	for quay in OBSTACLES:
+		if quay.has_point(point): return 0.0
+		var outside := (point - quay.get_center()).abs() - quay.size * 0.5
+		distance = minf(distance, Vector2(maxf(0, outside.x), maxf(0, outside.y)).length())
+	var phase := fposmod(float(chart_seed) * 0.618, TAU)
+	return maxf(0, distance) * 30.0 / (1.0 + 0.19 * sin(point.x * 8 + point.y * 4 + phase) + 0.13 * cos(point.y * 9 - point.x * 3 - phase))
+
+func sample_depth(point: Vector2) -> float:
+	return depth_at(point, map_seed)
 
 func cast_off() -> bool:
-	if not moored or departed:
+	if not moored or departed or failed:
 		return false
 	moored = false
 	message = "已解缆。加速后向北航行；港内限速 10 kn。"
 	return true
 
 func set_command(heading: float, speed: float) -> bool:
+	if failed: return false
+	if grounded and speed > Hazards.REFLOAT_SPEED_KNOTS:
+		message = "搁浅：转向深水，以不超过 4 kn 脱浅。"
+		return false
 	if moored or departed:
 		message = "请先解缆。" if moored else "已离港。"
 		return false
@@ -35,7 +59,7 @@ func set_command(heading: float, speed: float) -> bool:
 	return true
 
 func advance(delta: float) -> bool:
-	if departed or not is_finite(delta) or delta <= 0.0:
+	if departed or failed or not is_finite(delta) or delta <= 0.0:
 		return false
 	elapsed_seconds += delta
 	if moored or speed_knots <= 0.0:
@@ -46,11 +70,25 @@ func advance(delta: float) -> bool:
 	if crosses_exit:
 		var fraction := (EXIT_Y_KM - position_km.y) / (destination.y - position_km.y)
 		destination = position_km.lerp(destination, fraction)
-	if not _clear_segment(position_km, destination) or (crosses_exit and absf(destination.x) > EXIT_HALF_WIDTH_KM):
+	var impact := Hazards.trace(position_km, destination, 4.0, sample_depth, WATER_BOUNDS, grounded)
+	if not impact.is_empty() or not _clear_segment(position_km, destination) or (crosses_exit and absf(destination.x) > EXIT_HALF_WIDTH_KM):
+		if not impact.is_empty() and impact.kind != "boundary":
+			position_km = impact.position
+			grounded = true
+			impact.speed_knots = speed_knots
+			impact.damage = Hazards.impact_damage(speed_knots, impact.kind)
+			hull = maxf(0, hull - impact.damage)
+			impact.hull = hull
+			impact.harbor_seconds = elapsed_seconds
+			impacts.append(impact)
+			failed = hull <= 0
 		speed_knots = 0.0
-		message = "航路受阻，已停车。调整航向并沿中央航道重试。"
+		message = "港内撞毁；返回主菜单重新准备。" if failed else "触浅受损，已停车。转向深水，以不超过 4 kn 脱浅。" if grounded else "航路受阻，已停车。调整航向并沿中央航道重试。"
 		return false
 	position_km = destination
+	if grounded and sample_depth(position_km) >= 5.0:
+		grounded = false
+		message = "已脱浅；损伤将带入海上任务，必要时投入损管。"
 	if crosses_exit:
 		departed = true
 		message = "已驶离港口，移交海上任务。"

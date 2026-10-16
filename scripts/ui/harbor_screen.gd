@@ -57,7 +57,7 @@ class HarborChart extends Control:
 		var ship := _point(navigation.position_km)
 		var direction := Vector2(sin(deg_to_rad(navigation.heading_degrees)), -cos(deg_to_rad(navigation.heading_degrees)))
 		draw_set_transform(ship, deg_to_rad(navigation.heading_degrees))
-		preload("res://scripts/data/unit_glyph.gd").draw(self, Vector2.ZERO, 60, "ship.escort_carrier", Color("#a5f1ba"))
+		preload("res://scripts/data/unit_glyph.gd").draw(self, Vector2.ZERO, 60, "ship.escort_carrier", Color("#d86d5d") if navigation.failed else Color("#a5f1ba"))
 		draw_set_transform(Vector2.ZERO)
 		draw_line(ship + direction * 25, ship + direction * 36, Color("#a5f1ba"), 2)
 		draw_line(ship + direction * 36, ship + direction * 36 - direction.rotated(0.6) * 7, Color("#a5f1ba"), 2)
@@ -65,6 +65,7 @@ class HarborChart extends Control:
 		draw_string(get_theme_default_font(), Vector2(35, size.y - 4), "港区 2 km · 建筑 / 泊位 · 蓝线为水深 m", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("#a4c6af"))
 
 func _ready() -> void:
+	navigation.map_seed = WorldState.scenario_seed
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var bezel := Control.new()
@@ -97,6 +98,7 @@ func _ready() -> void:
 	column.add_child(row)
 	chart = HarborChart.new()
 	chart.navigation = navigation
+	chart.layout = preload("res://scripts/world/harbor_layout.gd").new(navigation.map_seed)
 	chart.custom_minimum_size = Vector2(620, 380)
 	chart.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(chart)
@@ -155,9 +157,12 @@ func _process(delta: float) -> void:
 	advance_navigation(delta * time_scale)
 
 func advance_navigation(delta: float) -> void:
-	if locally_paused or navigation.departed:
+	if locally_paused or navigation.departed or navigation.failed:
 		return
 	var departed: bool = navigation.advance(delta)
+	if not navigation.impacts.is_empty() and navigation.impacts[-1].get("recorded", false) == false:
+		navigation.impacts[-1].recorded = true
+		EventBus.record("harbor_navigation_impact", navigation.impacts[-1])
 	_refresh()
 	if departed:
 		departure_reached.emit()
@@ -165,9 +170,10 @@ func advance_navigation(delta: float) -> void:
 func _refresh() -> void:
 	status.text = "航向 %03d°    航速 %.0f / 10 kn\n距离港线 %.0f m\n港内时间 %.0f 秒\n%s" % [roundi(navigation.heading_degrees), navigation.speed_knots, maxf(0, navigation.position_km.y - Navigation.EXIT_Y_KM) * 1000, navigation.elapsed_seconds, "港内已暂停" if locally_paused else "已系泊" if navigation.moored else "正在出航"]
 	feedback.text = navigation.message + "\n离港前海上任务保持冻结；通过离港线后自动开始。"
+	status.text += "\n舰体 %.0f%% · 水深 %.1f m / 吃水 4 m" % [navigation.hull, navigation.sample_depth(navigation.position_km)]
 	cast_off_button.disabled = not navigation.moored or locally_paused
 	for button in command_buttons:
-		button.disabled = navigation.moored or locally_paused
+		button.disabled = navigation.moored or locally_paused or navigation.failed
 	pause_button.text = "继续" if locally_paused else "暂停"
 	scale_button.text = "时间 ×%.0f" % time_scale
 	chart.queue_redraw()

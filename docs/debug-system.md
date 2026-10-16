@@ -164,6 +164,8 @@ python tools/dev.py capture chart-silent
 
 `chart-wide` 是仅用于审查设施分布的 100 km 视图，游戏正常量程仍为 12.5／25 km。图鉴用于灰度、尺寸与形态复查；静态海图资料不会随雷达静默消失，也不代表获得新的接触观测。
 
+航行危险可用 `capture shoal-warning`、`capture grounding`、`capture wreck`、`capture harbor-impact` 复现。查询 `ship_grounded`／`ship_collision`／`ship_refloated`／`harbor_navigation_impact`，配合 `ship_damaged` 与 `ship_sunk` 确认原因；快照新增吃水、搁浅状态与最近事故。港内事故的 `harbor_seconds` 是准备阶段时钟，海上事件仍使用模拟时钟；不混淆二者。
+
 | 行为 | 回归证据 |
 |---|---|
 | 假成功退出、缺标记、stderr／原生错误、超时、启动失败、空目录与参数安全 | `tools/tests/test_runner.py::RunnerTests` |

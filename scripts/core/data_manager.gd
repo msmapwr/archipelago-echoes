@@ -102,7 +102,7 @@ func register_definition(resource: Resource, source: String) -> bool:
 func _validate_fields(definition: GameDefinition, source: String) -> bool:
 	var positive_fields: PackedStringArray = []
 	if definition is ShipDefinition:
-		positive_fields = ["max_speed_knots"]
+		positive_fields = ["max_speed_knots", "draft_m"]
 		if not is_finite(definition.armor_mm) or definition.armor_mm < 0:
 			errors.append("%s: armor_mm must be finite and nonnegative" % source)
 			return false

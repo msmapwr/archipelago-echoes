@@ -27,6 +27,8 @@ func _run() -> void:
 	_check(Guidance.project(landing).can_land, "sunken ship does not prevent valid airfield recovery")
 	var warning := Guidance.project({"mode": "cockpit", "airborne": true, "flight_speed": 100.0, "fuel_seconds": 60.0, "ship_distance": 20.0, "ship_speed": 0.0})
 	_check(warning.warning.contains("燃油警报") and warning.return_seconds > 60, "fuel warning compares remaining endurance against actual recovery estimate")
+	var airborne_risk := Guidance.project({"mode":"cockpit", "airborne":true, "flight_speed":100.0, "fuel_seconds":30.0, "ship_distance":20.0, "ship_afloat":true, "navigation_grounded":true, "navigation_warning":"母舰搁浅"})
+	_check(airborne_risk.warning.contains("燃油警报"), "pilot fuel emergency outranks grounded carrier advisory")
 	_check(Guidance.project({"mode": "bridge", "recovered": true}).stage == "identify", "early ship recovery can complete missing identification")
 	_check(Guidance.project({"mode": "recovered", "recovered": true}).stage == "incomplete", "early airfield recovery explains unmet objective")
 	_check(Guidance.project({"mode": "campaign_failed", "death_reason": "fuel_exhausted"}).next.contains("燃油耗尽"), "failure explains recorded cause")
@@ -149,6 +151,12 @@ func _click_button(main: Control, button: Button) -> void:
 	var logical: Vector2 = main.get_node("ScreenContainer").global_position + button.get_global_rect().get_center()
 	click.position = logical * Vector2(DisplayServer.window_get_size()) / root.get_visible_rect().size
 	click.global_position = click.position
+	# Feed a real pointer approach through the nested SubViewport before pressing.
+	var motion := InputEventMouseMotion.new()
+	motion.position = click.position
+	motion.global_position = click.global_position
+	Input.parse_input_event(motion)
+	await process_frame
 	Input.parse_input_event(click)
 	await process_frame
 	var release: InputEventMouseButton = click.duplicate()

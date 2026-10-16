@@ -1,6 +1,6 @@
 # 项目专属 Skill 驱动的 UI 增强计划
 
-状态：Large A 已完成代码、自动化与开发者截图验收；玩家无标签辨识仍待验收。Large B／C 后续推进。2026-10-11。执行证据见 [Large A 视觉报告](map-chart-qa.md)。
+状态：Large A、Large B 已完成代码、自动化与开发者截图检查；Large B 同时实现种子水深与搁浅／撞毁。Large C 的长期试玩及玩家无标签辨识仍待验收。2026-10-17。执行证据见 [Large A 视觉报告](map-chart-qa.md) 和 [Large B 验证报告](bridge-navigation-qa.md)。
 
 ## 目标与依据
 

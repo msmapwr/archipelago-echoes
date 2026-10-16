@@ -27,20 +27,23 @@ func _capture() -> void:
 			trainer.perform("scan")
 			trainer.perform("select")
 		await create_timer(0.7, true).timeout
-	elif capture_mode in ["harbor", "harbor-east", "game", "chart-wide", "chart-stale", "chart-silent", "damage", "archive", "fire-control", "fire-archive", "lead-control", "lead-archive", "projectile", "splash", "splash-archive", "lock-control", "ammo-impact", "groups-control", "groups-archive", "enemy-withdrawal", "library", "guide-return", "sortie", "flight-nav"]:
+	elif capture_mode in ["harbor", "harbor-east", "game", "chart-wide", "chart-stale", "chart-silent", "shoal-warning", "grounding", "wreck", "harbor-impact", "damage", "archive", "fire-control", "fire-archive", "lead-control", "lead-archive", "projectile", "splash", "splash-archive", "lock-control", "ammo-impact", "groups-control", "groups-archive", "enemy-withdrawal", "library", "guide-return", "sortie", "flight-nav"]:
 		shell.get_node("StartButton").emit_signal("pressed")
 		for step in range(7):
 			if shell.get_node("GameCRTSlot/Preparation").stage == "tutorial":
 				shell.get_node("GameCRTSlot/Preparation").tutorial.skip()
 			shell.get_node("GameCRTSlot/Preparation").advance()
 		var harbor: Control = shell.get_node("GameCRTSlot/Harbor")
-		if capture_mode in ["harbor", "harbor-east"]:
+		if capture_mode in ["harbor", "harbor-east", "harbor-impact"]:
 			harbor.navigation.cast_off()
 			harbor.navigation.set_command(0.0, 6.0)
 			harbor.advance_navigation(30.0)
 			if capture_mode == "harbor-east":
 				harbor.navigation.set_command(90.0, 0.0)
 			harbor.toggle_pause()
+			if capture_mode == "harbor-impact":
+				harbor.navigation.set_command(270, 10)
+				harbor.advance_navigation(160)
 			harbor.set_process(false)
 		else:
 			harbor.navigation.cast_off()
@@ -143,6 +146,14 @@ func _capture() -> void:
 			if capture_mode == "chart-silent": mission.set_radar_emitting(false)
 			main._refresh_ui()
 			if capture_mode == "chart-wide": main.radar.set_display_range(100)
+		if capture_mode in ["shoal-warning", "grounding", "wreck"]:
+			var world: Node = root.get_node("WorldState")
+			var island: Dictionary = world.map.islands[0]
+			world.ship_position_km = island.center - Vector2(island.radius_km + 0.35, 0)
+			world.set_ship_command(90, 22 if capture_mode == "wreck" else 8)
+			if capture_mode != "shoal-warning": root.get_node("WorldClock").advance(200)
+			world.ship_position_changed.emit(world.ship_position_km)
+			shell.get_node("GameCRTSlot").get_child(0)._refresh_ui()
 		paused = true
 	else:
 		await create_timer(2.3, true).timeout

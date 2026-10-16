@@ -10,6 +10,7 @@
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_menu_glass"]
 shader = ExtResource("4")
+shader_parameter/device_type = 0
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_video_glass"]
 shader = ExtResource("4")
@@ -17,6 +18,7 @@ shader_parameter/line_strength = 0.0
 shader_parameter/edge_strength = 0.05
 shader_parameter/screen_size = Vector2(188, 154)
 shader_parameter/corner_radius = 14.0
+shader_parameter/device_type = 2
 
 [node name="ConsoleShell" type="Control"]
 process_mode = 3

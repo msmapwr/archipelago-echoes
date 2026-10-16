@@ -26,6 +26,8 @@ func _init(map_seed: int, contact_bearing_degrees: float, contact_range_km: floa
 	for anchor in ISLAND_ANCHORS:
 		var center: Vector2 = anchor + Vector2(rng.randf_range(-1.5, 1.5), rng.randf_range(-1.5, 1.5))
 		islands.append({"center": center, "radius_km": rng.randf_range(4.0, 6.0)})
+	# Keep the existing land geometry and navigation corridors; only the shelf varies.
+	for island in islands: island.depth_phase = rng.randf_range(0, TAU)
 	var families := ["headquarters", "airfield", "radar_station", "factory", "city"]
 	for index in range(islands.size()):
 		facilities.append({"id": "facility.%s.01" % families[index], "label": ["HQ1", "AF1", "RD1", "FX1", "CT1"][index], "family": "building." + families[index], "position_km": islands[index].center, "size_class": "medium", "variant": index + 1, "chart_known": true, "role": "recovery_airfield" if index == 1 else "chart_reference"})
@@ -36,18 +38,25 @@ func _init(map_seed: int, contact_bearing_degrees: float, contact_range_km: floa
 func depth_at(point_km: Vector2) -> float:
 	if not is_water(point_km): return 0.0
 	var coast_distance := INF
-	for island in islands: coast_distance = minf(coast_distance, point_km.distance_to(island.center) - float(island.radius_km))
+	for island in islands:
+		var offset: Vector2 = point_km - island.center
+		coast_distance = minf(coast_distance, (offset.length() - float(island.radius_km)) / shelf_factor(island, offset.angle()))
 	return minf(300.0, coast_distance * 50.0)
+
+static func shelf_factor(island: Dictionary, angle: float) -> float:
+	var phase: float = island.get("depth_phase", 0.0)
+	return 1.0 + 0.34 * sin(angle * 3 + phase) + 0.18 * sin(angle * 5 - phase * 1.3) + 0.10 * cos(angle * 8 + phase * 0.7)
 
 func _build_depth_contours() -> void:
 	depth_contours.clear()
 	for depth in [20.0, 50.0, 100.0, 200.0]:
 		var segments: Array[PackedVector2Array] = []
 		for island in islands:
-			var radius: float = island.radius_km + depth / 50.0
-			for index in range(128):
-				var from: Vector2 = island.center + Vector2.from_angle(TAU * index / 128.0) * radius
-				var to: Vector2 = island.center + Vector2.from_angle(TAU * (index + 1) / 128.0) * radius
+			for index in range(192):
+				var angle := TAU * index / 192.0
+				var next_angle := TAU * (index + 1) / 192.0
+				var from: Vector2 = island.center + Vector2.from_angle(angle) * (island.radius_km + depth / 50.0 * shelf_factor(island, angle))
+				var to: Vector2 = island.center + Vector2.from_angle(next_angle) * (island.radius_km + depth / 50.0 * shelf_factor(island, next_angle))
 				if can_navigate_segment(from, to) and absf(depth_at(from) - depth) < 0.1 and absf(depth_at(to) - depth) < 0.1 and absf(depth_at((from + to) * 0.5) - depth) < 1.0:
 					segments.append(PackedVector2Array([from, to]))
 		depth_contours.append({"depth_m": depth, "segments": segments})

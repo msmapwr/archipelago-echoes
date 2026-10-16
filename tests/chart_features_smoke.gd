@@ -35,7 +35,7 @@ func map_data() -> void:
 	check(map.depth_contours != other.depth_contours, "different seed changes actual chart geometry")
 	check(map.depth_at(map.islands[0].center) == 0, "land has zero sea depth")
 	var coast: Vector2 = map.islands[0].center + Vector2(map.islands[0].radius_km + 1, 0)
-	check(is_equal_approx(map.depth_at(coast), 50), "one-kilometer coastal shelf is fifty meters")
+	check(map.depth_at(coast) > 25 and map.depth_at(coast) < 150, "one-kilometer coastal shelf stays within seeded depth bounds")
 	check(map.depth_at(Vector2(-1, 2)) == 0, "outside map cannot be navigable water")
 	var ids := {}
 	for facility in map.facilities:

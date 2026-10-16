@@ -107,6 +107,11 @@ func set_gun_solution(show_arc: bool, solution_ready: bool, weapon_range_km: flo
 	queue_redraw()
 
 func _ready() -> void:
+	var phosphor := ShaderMaterial.new()
+	phosphor.shader = preload("res://shaders/ppi_phosphor.gdshader")
+	material = phosphor
+	resized.connect(func() -> void: phosphor.set_shader_parameter("screen_size", size))
+	phosphor.set_shader_parameter("screen_size", size)
 	WorldClock.time_advanced.connect(_on_world_time_advanced)
 	EventBus.contact_discovered.connect(_capture_echo)
 	EventBus.contact_updated.connect(_capture_echo)
@@ -407,6 +412,11 @@ func _draw_sweep(center: Vector2, radius: float) -> void:
 	draw_line(center, center + direction * radius, Color(0.5, 0.96, 0.6, 0.42), 1.6, true)
 
 func _draw_ownship(center: Vector2, radius: float) -> void:
+	if not GameManager.ship_afloat and not flight_navigation:
+		draw_line(center + Vector2(-10, -10), center + Vector2(10, 10), AMBER, 2, true)
+		draw_line(center + Vector2(-10, 10), center + Vector2(10, -10), AMBER, 2, true)
+		draw_string(ThemeDB.fallback_font, center + Vector2(16, 4), "WRECK", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, AMBER)
+		return
 	var direction := Vector2(sin(deg_to_rad(own_heading_degrees)), -cos(deg_to_rad(own_heading_degrees)))
 	draw_line(center, center + direction * 28.0, OWN_SHIP, 2.0, true)
 	draw_circle(center, 4.0, Color("#b7dbe0"))

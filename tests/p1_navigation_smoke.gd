@@ -43,7 +43,7 @@ func _run() -> void:
 	world.ship_position_km = blocked_start
 	_check(world.set_ship_command(90.0, 10.0), "ship accepts course toward island")
 	clock.advance(600.0)
-	_check(world.ship_position_km == blocked_start and is_zero_approx(world.ship_speed_knots), "island blocks movement and stops ship")
+	_check(world.map.is_water(world.ship_position_km) and world.ship_position_km.distance_to(blocked_start) < 0.2 and is_zero_approx(world.ship_speed_knots), "swept shoal collision stops ship before land without tunneling")
 	_check("航路受阻" in main.get_node("Content/Details/NavigationStatus").text, "blocked route gives visible feedback")
 	var boundary_start := Vector2(99.0, 50.0)
 	_check(world.map.is_water(boundary_start), "boundary test begins in water")

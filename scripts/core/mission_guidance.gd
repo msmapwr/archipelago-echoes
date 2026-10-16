@@ -36,6 +36,7 @@ static func project(state: Dictionary) -> Dictionary:
 		result.title = "指挥官失联"
 		var causes := {"fuel_exhausted": "燃油耗尽，飞机失事。", "ship_sunk_with_player_aboard": "母舰沉没，指挥官未能撤离。"}
 		result.next = causes.get(state.get("death_reason", ""), "指挥官死亡，本次行动结束。") + " 可重新开始或返回主菜单。"
+		if not str(state.get("navigation_loss", "")).is_empty(): result.next = "母舰触礁撞毁，指挥官未能撤离。可重新开始或返回主菜单。"
 		return result
 	if mode == "settlement":
 		result.stage = "complete"
@@ -116,4 +117,7 @@ static func project(state: Dictionary) -> Dictionary:
 		result.warning = "母舰严重受损；低速投入损管或调整航路脱离接触。"
 	elif state.get("tracking", false):
 		result.warning = "敌方正在追踪母舰；雷达静默不能立即消除已有追踪。"
+	if not str(state.get("navigation_warning", "")).is_empty() and state.get("ship_afloat", true):
+		if mode in ["bridge", "configuration", "switching"]: result.warning = state.navigation_warning
+		elif result.warning.is_empty() and state.get("navigation_grounded", false): result.warning = "母舰搁浅并已停车；可在窗口内回收，或改航机场。"
 	return result

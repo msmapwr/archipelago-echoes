@@ -68,6 +68,8 @@ func _on_navigation_blocked(_position_km: Vector2) -> void:
 	navigation_status.text = "航路受阻 · 已停车，请调整航向"
 
 func _update_ship_details() -> void:
+	get_node("Content/Details/SpeedControls/SpeedUp").text = "加速 %.0f kn" % WorldState.navigation_speed_step()
+	get_node("Content/Details/SpeedControls/SlowDown").text = "减速 %.0f kn" % WorldState.navigation_speed_step()
 	ship_details.text = "位置  E %05.1f / S %05.1f km\n航向  %03d°    航速  %.0f / %.0f kn" % [WorldState.ship_position_km.x, WorldState.ship_position_km.y, roundi(WorldState.ship_heading_degrees), WorldState.ship_speed_knots, WorldState.ship_max_speed_knots]
 
 func _on_turn_port_pressed() -> void:
@@ -77,10 +79,10 @@ func _on_turn_starboard_pressed() -> void:
 	WorldState.set_ship_command(WorldState.ship_heading_degrees + 15.0, WorldState.ship_speed_knots)
 
 func _on_slow_down_pressed() -> void:
-	WorldState.set_ship_command(WorldState.ship_heading_degrees, maxf(0.0, WorldState.ship_speed_knots - 5.0))
+	WorldState.set_ship_command(WorldState.ship_heading_degrees, maxf(0.0, WorldState.ship_speed_knots - WorldState.navigation_speed_step()))
 
 func _on_speed_up_pressed() -> void:
-	WorldState.set_ship_command(WorldState.ship_heading_degrees, minf(WorldState.ship_max_speed_knots, WorldState.ship_speed_knots + 5.0))
+	WorldState.set_ship_command(WorldState.ship_heading_degrees, minf(WorldState.navigation_speed_limit(), WorldState.ship_speed_knots + WorldState.navigation_speed_step()))
 
 func _input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):

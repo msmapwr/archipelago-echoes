@@ -163,10 +163,14 @@ func _enter_mission() -> void:
 	var departure_heading: float = harbor.navigation.heading_degrees
 	var departure_speed: float = harbor.navigation.speed_knots
 	var harbor_seconds: float = harbor.navigation.elapsed_seconds
+	var departure_hull: float = harbor.navigation.hull
+	var harbor_impacts: Array = harbor.navigation.impacts.duplicate(true)
 	_clear_session_screen()
 	started = true
 	session_stage = "mission"
 	MissionController.restart_scenario()
+	MissionController.ship_health = departure_hull
+	for impact in harbor_impacts: EventBus.record("harbor_navigation_impact", impact)
 	WorldState.ship_position_km = departure_position
 	WorldState.set_ship_command(departure_heading, departure_speed)
 	WorldState.ship_position_changed.emit(departure_position)
@@ -217,6 +221,13 @@ func _refresh_status() -> void:
 		if session_stage == "completed" or session_stage == "failed":
 			get_tree().paused = true
 		top_message.text = "CIC  /  指挥链路已建立     ·     作战情报中心在线"
+		var risk: Dictionary = WorldState.navigation_risk()
+		if GameManager.mode == "campaign_failed": top_message.text = "行动结束 / " + (MissionController.ship_loss_cause if not MissionController.ship_loss_cause.is_empty() else "指挥官失联")
+		elif MissionController.aircraft_airborne and MissionController.aircraft_fuel_seconds <= 120: top_message.text = "燃油警报 / 余 %.1f 分，请立即核对回收窗口" % (MissionController.aircraft_fuel_seconds / 60.0)
+		elif MissionController.aircraft_airborne and WorldState.ship_grounded and GameManager.ship_afloat: top_message.text = "母舰搁浅 / 已停车，可在窗口内回收或改航机场"
+		elif not risk.warning.is_empty(): top_message.text = "航行警报 / " + risk.warning
+		elif MissionController.ship_health <= 40: top_message.text = "损管警报 / 舰体严重受损，请低速维修或脱离交战"
+		top_message.add_theme_color_override("font_color", RED if GameManager.mode == "campaign_failed" or WorldState.ship_grounded else AMBER if not risk.warning.is_empty() else IVORY)
 		time_value.text = WorldClock.formatted_time()
 		ammo_value.text = "%s %02d/%02d · 舰炮总余 %02d · 对海弹 %01d" % [MissionController.active_gun_mount().display_name, MissionController.ship_ammo, MissionController.active_gun_mount().capacity, MissionController.total_ship_ammo(), MissionController.aircraft_bombs]
 		mode_value.text = "MODE  /  %s" % GameManager.mode.to_upper()
