@@ -4,6 +4,12 @@ func _initialize() -> void:
 	call_deferred("_capture")
 
 func _capture() -> void:
+	# Process-local display fixtures; never write preferences or tutorial progress.
+	var resolution := OS.get_environment("CONSOLE_CAPTURE_RESOLUTION").split("x")
+	if resolution.size() == 2:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+		root.size = Vector2i(int(resolution[0]), int(resolution[1]))
+	RenderingServer.global_shader_parameter_set("crt_effect_strength", 0.25 if OS.get_environment("CONSOLE_CAPTURE_WEAK_CRT") == "1" else 1.0)
 	root.get_node("UserSettings").tutorial_completed = false # Capture named preparation pages independently of local profile.
 	root.get_node("UserSettings").skip_tutorial_by_default = false # Explicit training fixture.
 	var shell: Control = load("res://scenes/main/console_shell.tscn").instantiate()
@@ -21,7 +27,7 @@ func _capture() -> void:
 			trainer.perform("scan")
 			trainer.perform("select")
 		await create_timer(0.7, true).timeout
-	elif capture_mode in ["harbor", "harbor-east", "game", "damage", "archive", "fire-control", "fire-archive", "lead-control", "lead-archive", "projectile", "splash", "splash-archive", "lock-control", "ammo-impact", "groups-control", "groups-archive", "enemy-withdrawal", "library", "guide-return", "sortie", "flight-nav"]:
+	elif capture_mode in ["harbor", "harbor-east", "game", "chart-wide", "chart-stale", "chart-silent", "damage", "archive", "fire-control", "fire-archive", "lead-control", "lead-archive", "projectile", "splash", "splash-archive", "lock-control", "ammo-impact", "groups-control", "groups-archive", "enemy-withdrawal", "library", "guide-return", "sortie", "flight-nav"]:
 		shell.get_node("StartButton").emit_signal("pressed")
 		for step in range(7):
 			if shell.get_node("GameCRTSlot/Preparation").stage == "tutorial":
@@ -35,6 +41,7 @@ func _capture() -> void:
 			if capture_mode == "harbor-east":
 				harbor.navigation.set_command(90.0, 0.0)
 			harbor.toggle_pause()
+			harbor.set_process(false)
 		else:
 			harbor.navigation.cast_off()
 			harbor.navigation.set_command(0.0, 10.0)
@@ -127,6 +134,16 @@ func _capture() -> void:
 			root.get_node("WorldClock").advance(5)
 			mission.set_aircraft_waypoint(mission.aircraft_position_km + Vector2(8, -8))
 			root.get_node("WorldClock").advance(70)
+		if capture_mode.begins_with("chart-"):
+			var main: Control = shell.get_node("GameCRTSlot").get_child(0)
+			var mission: Node = root.get_node("MissionController")
+			mission.scan()
+			main._on_contact_selected(mission.CONTACT_ID)
+			if capture_mode in ["chart-stale", "chart-silent"]: root.get_node("WorldClock").advance(45)
+			if capture_mode == "chart-silent": mission.set_radar_emitting(false)
+			main._refresh_ui()
+			if capture_mode == "chart-wide": main.radar.set_display_range(100)
+		paused = true
 	else:
 		await create_timer(2.3, true).timeout
 	await process_frame

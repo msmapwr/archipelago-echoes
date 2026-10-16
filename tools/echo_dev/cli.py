@@ -12,7 +12,7 @@ import sys
 from .analysis import bundle, filtered, native_diagnostics, read_logs, state_diff, summarize
 from .runner import discover_tests, execute, find_godot, godot_arguments, new_run, save_json, select_tests, PASS_MARKER
 
-CAPTURE_MODES = ("menu", "preparation", "settings", "generation", "tutorial", "background", "harbor", "harbor-east", "game", "damage", "archive", "fire-control", "fire-archive", "lead-control", "lead-archive", "projectile", "splash", "splash-archive", "lock-control", "ammo-impact", "groups-control", "groups-archive", "enemy-withdrawal", "library", "guide-return", "sortie", "flight-nav")
+CAPTURE_MODES = ("menu", "preparation", "settings", "generation", "tutorial", "background", "harbor", "harbor-east", "game", "chart-wide", "chart-stale", "chart-silent", "damage", "archive", "fire-control", "fire-archive", "lead-control", "lead-archive", "projectile", "splash", "splash-archive", "lock-control", "ammo-impact", "groups-control", "groups-archive", "enemy-withdrawal", "library", "guide-return", "sortie", "flight-nav")
 
 
 def positive(value: str) -> float:
@@ -54,6 +54,8 @@ def parser() -> argparse.ArgumentParser:
     capture = commands.add_parser("capture", help="生成指定 CRT 场景截图")
     capture.add_argument("mode", choices=CAPTURE_MODES)
     capture.add_argument("--timeout", type=positive, default=45)
+    capture.add_argument("--resolution", choices=("1280x720", "1600x900", "1920x1080"), default="1600x900")
+    capture.add_argument("--weak-crt", action="store_true", help="仅在截图进程内弱化 CRT，不保存玩家设置")
     analyze = commands.add_parser("analyze", help="分析会话／炮弹／命令日志，可处理崩溃后的残缺行")
     analyze.add_argument("path", type=Path)
     for option in ("session", "order", "shot", "kind", "level"):
@@ -187,7 +189,8 @@ def main(arguments: list[str] | None = None) -> int:
         elif all(result["passed"] for result in results) and args.command == "capture":
             folder = run / "capture"
             png = folder / (args.mode + ".png")
-            env = {**diagnostic_env, "CONSOLE_CAPTURE_MODE": "" if args.mode == "menu" else args.mode, "CONSOLE_CAPTURE_PATH": str(png.resolve())}
+            env = {**diagnostic_env, "CONSOLE_CAPTURE_MODE": "" if args.mode == "menu" else args.mode, "CONSOLE_CAPTURE_PATH": str(png.resolve()), "CONSOLE_CAPTURE_RESOLUTION": args.resolution, "CONSOLE_CAPTURE_WEAK_CRT": "1" if args.weak_crt else "0"}
+            save_json(run / "capture-settings.json", {"mode": args.mode, "resolution": args.resolution, "weak_crt": args.weak_crt})
             result = execute(godot_arguments(binary, project, folder, ["--script", "res://tests/render_console.gd"]), project, folder, timeout=args.timeout, marker=re.compile("Console capture saved:"), environment=env)
             result["passed"] = result["passed"] and png.is_file() and png.stat().st_size > 8 and png.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
             save_json(folder / "result.json", result)

@@ -21,6 +21,30 @@ var contact_selected_state: bool = false
 var bearing_degrees: float = 0.0
 var range_km: float = 0.0
 var land_areas: Array[Dictionary] = []
+var chart_facilities: Array[Dictionary] = []
+var depth_contours: Array[Dictionary] = []
+var _coast_key: Array = []
+var _coast_polygons: Array[PackedVector2Array] = []
+var _depth_key: Array = []
+var _depth_lines: Array[PackedVector2Array] = []
+var _marker_key: Array = []
+var _markers: Array[Dictionary] = []
+const ChartGeometry = preload("res://scripts/world/chart_geometry.gd")
+
+func set_chart_features(facilities: Array[Dictionary], contours: Array[Dictionary]) -> void:
+	# Immutable chart geometry is shared; no copies or regeneration each frame.
+	if depth_contours != contours: _depth_key.clear()
+	if chart_facilities != facilities: _marker_key.clear()
+	chart_facilities = facilities
+	depth_contours = contours
+	queue_redraw()
+
+func visible_chart_facilities() -> Array[Dictionary]:
+	var facilities_in_range: Array[Dictionary] = []
+	for facility in chart_facilities:
+		if facility.get("chart_known", true) and facility.position_km.distance_to(own_position_km) <= display_range_km:
+			facilities_in_range.append(facility)
+	return facilities_in_range
 var own_position_km: Vector2 = Vector2.ZERO
 var own_heading_degrees: float = 0.0
 var aircraft_position_km: Vector2 = Vector2.ZERO
@@ -191,9 +215,11 @@ func _draw() -> void:
 	draw_arc(center, radius + 7.0, 0.0, TAU, 160, Color("#40674b"), 2.0, true)
 	draw_circle(center, radius, DARK)
 	_draw_grid(center, radius)
+	_draw_depth_chart(center, radius)
 	if gun_arc_visible:
 		_draw_gun_arc(center, radius)
 	_draw_land(center, radius)
+	_draw_facilities(center, radius)
 	_draw_echoes(center, radius)
 	if sweep_enabled:
 		_draw_sweep(center, radius)
@@ -220,23 +246,139 @@ func _draw_grid(center: Vector2, radius: float) -> void:
 	draw_arc(center, radius, 0.0, TAU, 160, Color("#447551"), 1.0, true)
 
 func _draw_land(center: Vector2, radius: float) -> void:
-	for island in land_areas:
-		var offset_km: Vector2 = island["center"] - own_position_km
-		var island_radius_km: float = island["radius_km"]
-		if offset_km.length() + island_radius_km > display_range_km:
-			continue
-		var point := center + offset_km * radius / display_range_km
-		var island_radius := island_radius_km * radius / display_range_km
-		for contour in range(3):
+	var key := [own_position_km, display_range_km, radius, land_areas.hash()]
+	if key != _coast_key:
+		_coast_key = key
+		_coast_polygons.clear()
+		for island in land_areas:
+			var offset: Vector2 = (island.center - own_position_km) * radius / display_range_km
+			var reach: float = island.radius_km * radius / display_range_km
+			if offset.length() - reach >= radius: continue
 			var points := PackedVector2Array()
-			var contour_scale := 1.0 - float(contour) * 0.24
-			for index in range(49):
-				var angle := TAU * float(index) / 48.0
-				var edge := 1.0 + 0.10 * sin(angle * 4.0 + point.x * 0.03) + 0.07 * cos(angle * 7.0 + point.y * 0.02)
-				points.append(point + Vector2(cos(angle), sin(angle)) * island_radius * contour_scale * edge)
-			if contour == 0:
-				draw_colored_polygon(points, Color(0.12, 0.32, 0.18, 0.46))
-			draw_polyline(points, Color(COAST, 0.42 - float(contour) * 0.1), 1.0, true)
+			for index in range(96): points.append(offset + Vector2.from_angle(TAU * index / 96.0) * reach)
+			var clipped := ChartGeometry.clip_polygon_circle(points, radius - 1)
+			if clipped.size() >= 3: _coast_polygons.append(clipped)
+	for polygon in _coast_polygons:
+		var points := PackedVector2Array()
+		for point in polygon: points.append(center + point)
+		draw_colored_polygon(points, Color(0.12, 0.32, 0.18, 0.46))
+		points.append(points[0])
+		draw_polyline(points, Color(COAST, 0.55), 1.0, true)
+
+func _draw_depth_chart(center: Vector2, radius: float) -> void:
+	var key := [own_position_km, display_range_km, radius]
+	if key != _depth_key:
+		_depth_key = key
+		_depth_lines.clear()
+		for contour in depth_contours:
+			for segment in contour.segments:
+				var clipped := ChartGeometry.clip_circle((segment[0] - own_position_km) * radius / display_range_km, (segment[1] - own_position_km) * radius / display_range_km, radius - 2)
+				if clipped.size() == 2: _depth_lines.append(clipped)
+	for line in _depth_lines:
+		draw_line(center + line[0], center + line[1], Color(0.30, 0.58, 0.66, 0.28), 1.0, true)
+	for label in depth_chart_labels(radius):
+		draw_string(ThemeDB.fallback_font, center + label.point, "%dm" % label.depth_m, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#668f96"))
+
+func depth_chart_labels(radius: float) -> Array[Dictionary]:
+	var labels: Array[Dictionary] = []
+	var occupied := _chart_tactical_rects(radius)
+	for marker in chart_facility_markers(radius):
+		occupied.append(marker.icon_rect.grow(3))
+		if marker.caption_visible: occupied.append(marker.caption_rect.grow(3))
+	if contact_visible:
+		var contact_point := Vector2(sin(deg_to_rad(bearing_degrees)), -cos(deg_to_rad(bearing_degrees))) * range_km * radius / display_range_km
+		occupied.append(Rect2(contact_point - Vector2(22, 22), Vector2(70, 44)))
+	for contour in depth_contours:
+		for index in range(contour.segments.size()):
+			var segment: PackedVector2Array = contour.segments[(index + labels.size() * 32) % contour.segments.size()]
+			var point: Vector2 = (segment[0] - own_position_km) * radius / display_range_km
+			if point.length() > radius - 36 or point.length() < 25: continue
+			var rect := Rect2(point + Vector2(-2, -12), Vector2(36, 16))
+			var free := true
+			for previous in occupied:
+				if previous.intersects(rect):
+					free = false
+					break
+			if not free: continue
+			labels.append({"depth_m": contour.depth_m, "point": point, "rect": rect})
+			occupied.append(rect.grow(4))
+			break
+	return labels
+
+func _chart_tactical_rects(radius: float) -> Array[Rect2]:
+	var occupied: Array[Rect2] = [Rect2(-36, -36, 72, 72)]
+	if contact_visible:
+		var point := Vector2.UP.rotated(deg_to_rad(bearing_degrees)) * range_km * radius / display_range_km
+		occupied.append(Rect2(point - Vector2(30, 30), Vector2(130, 70)))
+	if flight_navigation:
+		for location in [carrier_position_km, airfield_position_km]:
+			var point: Vector2 = ((location - own_position_km) * radius / display_range_km).limit_length(radius - 24)
+			occupied.append(Rect2(point - Vector2(38, 35), Vector2(100, 65)))
+		if navigation_target_visible:
+			var point := ((navigation_target_km - own_position_km) * radius / display_range_km).limit_length(radius - 18)
+			occupied.append(Rect2(point - Vector2(15, 15), Vector2(30, 30)))
+	return occupied
+
+func chart_facility_markers(radius: float) -> Array[Dictionary]:
+	var key := [own_position_km, display_range_km, radius, chart_facilities.hash(), contact_visible, bearing_degrees, range_km, flight_navigation, carrier_position_km, airfield_position_km, navigation_target_visible, navigation_target_km]
+	if key == _marker_key: return _markers
+	_marker_key = key
+	var result: Array[Dictionary] = []
+	var occupied := _chart_tactical_rects(radius)
+	var pixels := clampf(34.0 * MAX_RANGE_KM / display_range_km, 32, 48)
+	for facility in visible_chart_facilities():
+		# Flight recovery marker owns AF1, including its off-screen bearing.
+		if flight_navigation and facility.id == "facility.airfield.01": continue
+		var anchor: Vector2 = (facility.position_km - own_position_km) * radius / display_range_km
+		var point := anchor.limit_length(maxf(0, radius - pixels * 0.72))
+		var candidates: Array[Vector2] = [Vector2.ZERO]
+		for distance in [44, 88, 132]:
+			for direction in [Vector2(-1, 0), Vector2(1, 0), Vector2(0, -1), Vector2(0, 1), Vector2(-1, -1), Vector2(1, 1), Vector2(-1, 1), Vector2(1, -1)]: candidates.append(direction * distance)
+		for delta in candidates:
+			var candidate: Vector2 = point + delta
+			if candidate.length() > radius - pixels * 0.72: continue
+			var candidate_rect := Rect2(candidate - Vector2.ONE * pixels * 0.5, Vector2.ONE * pixels)
+			var free := true
+			for rect in occupied:
+				if candidate_rect.intersects(rect):
+					free = false
+					break
+			if free:
+				point = candidate
+				break
+		var icon_rect := Rect2(point - Vector2.ONE * pixels * 0.5, Vector2.ONE * pixels)
+		occupied.append(icon_rect.grow(3))
+		result.append({"facility": facility, "anchor": anchor, "point": point, "pixels": pixels, "icon_rect": icon_rect, "caption_visible": false, "caption_rect": Rect2()})
+	# Place all symbols first, so captions cannot cover a later facility.
+	for marker in result:
+		var text_width := ThemeDB.fallback_font.get_string_size(marker.facility.label, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x
+		for delta in [Vector2(marker.pixels * 0.5 + 4, -4), Vector2(-text_width * 0.5, marker.pixels * 0.5 + 14), Vector2(-text_width - marker.pixels * 0.5 - 4, -4), Vector2(-text_width * 0.5, -marker.pixels * 0.5 - 5)]:
+			var point: Vector2 = marker.point + delta
+			var rect := Rect2(point - Vector2(0, 11), Vector2(text_width, 14))
+			if rect.position.length() > radius - 4 or rect.end.length() > radius - 4: continue
+			var free := true
+			for previous in occupied:
+				if previous.intersects(rect):
+					free = false
+					break
+			if not free: continue
+			marker.caption_visible = true
+			marker.caption_point = point
+			marker.caption_rect = rect
+			occupied.append(rect.grow(2))
+			break
+	_markers = result
+	return _markers
+
+func _draw_facilities(center: Vector2, radius: float) -> void:
+	for marker in chart_facility_markers(radius):
+		if marker.point.distance_to(marker.anchor) > 2:
+			draw_line(center + marker.anchor, center + marker.point, Color(COAST, 0.5), 1, true)
+			draw_circle(center + marker.anchor, 1.5, COAST)
+		var facility: Dictionary = marker.facility
+		preload("res://scripts/data/unit_glyph.gd").draw(self, center + marker.point, marker.pixels, facility.family, Color("#8ab9a3"), facility.size_class, facility.variant, false, facility.get("component", ""))
+		if marker.caption_visible:
+			draw_string(ThemeDB.fallback_font, center + marker.caption_point, facility.label, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#92bba5"))
 
 func _draw_echoes(center: Vector2, radius: float) -> void:
 	for echo in _echoes:

@@ -36,6 +36,7 @@ func _ready() -> void:
 		sweep_timer.stop()
 		return
 	radar.set_land_areas(WorldState.map.islands, WorldState.ship_position_km)
+	radar.set_chart_features(WorldState.map.facilities, WorldState.map.depth_contours)
 	WorldClock.time_advanced.connect(_on_world_time_advanced)
 	WorldState.ship_position_changed.connect(_on_ship_position_changed)
 	WorldState.ship_command_changed.connect(_on_ship_command_changed)

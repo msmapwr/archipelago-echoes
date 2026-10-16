@@ -62,6 +62,22 @@ class CliTests(unittest.TestCase):
         summary = json.loads(next((self.folder / "reports").rglob("summary.json")).read_text())
         self.assertFalse(summary["passed"])
 
+    def test_capture_options_reach_only_child_process_and_report(self):
+        received = {}
+
+        def png_capture(arguments, project, folder, **options):
+            received.update(options["environment"])
+            folder.mkdir(parents=True)
+            Path(received["CONSOLE_CAPTURE_PATH"]).write_bytes(b"\x89PNG\r\n\x1a\nfixture")
+            return self.result()
+
+        with patch("echo_dev.cli.import_project", return_value=self.result()), patch("echo_dev.cli.execute", side_effect=png_capture):
+            self.assertEqual(self.invoke(["capture", "chart-silent", "--resolution", "1280x720", "--weak-crt"]), 0)
+        self.assertEqual(received["CONSOLE_CAPTURE_RESOLUTION"], "1280x720")
+        self.assertEqual(received["CONSOLE_CAPTURE_WEAK_CRT"], "1")
+        settings = json.loads(next((self.folder / "reports").rglob("capture-settings.json")).read_text())
+        self.assertEqual(settings, {"mode": "chart-silent", "resolution": "1280x720", "weak_crt": True})
+
     def test_log_filters_do_not_hide_session_end_in_summary(self):
         path = self.folder / "session.jsonl"
         records = [{"schema_version": 1, "session_id": "s", "kind": "event.weapon_fired", "details": {"order_id": "o"}}, {"schema_version": 1, "session_id": "s", "kind": "session_end", "details": {}}]

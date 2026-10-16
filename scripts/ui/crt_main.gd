@@ -740,6 +740,7 @@ func _refresh_radar() -> void:
 	var flying: bool = MissionController.aircraft_airborne and GameManager.mode in ["cockpit", "returning"]
 	var origin: Vector2 = MissionController.aircraft_position_km if flying else WorldState.ship_position_km
 	radar.set_land_areas(WorldState.map.islands, origin)
+	radar.set_chart_features(WorldState.map.facilities, WorldState.map.depth_contours)
 	radar.set_ship_heading(MissionController.aircraft_heading_degrees if flying else WorldState.ship_heading_degrees)
 	radar.set_sweep_enabled(MissionController.radar_emitting and not flying)
 	radar.set_integrity(MissionController.ship_health)

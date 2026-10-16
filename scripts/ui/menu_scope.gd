@@ -44,6 +44,14 @@ func _draw() -> void:
 	_island(center + Vector2(-104, 68), 48.0, 0.72)
 	_island(center + Vector2(105, 114), 30.0, 0.63)
 	_island(center + Vector2(135, -78), 21.0, 0.56)
+	for island in [{"offset": Vector2(-104, 68), "radius": 48.0, "family": "building.port"}, {"offset": Vector2(105, 114), "radius": 30.0, "family": "building.airfield"}, {"offset": Vector2(135, -78), "radius": 21.0, "family": "building.radar_station"}]:
+		for ring in range(1, 3):
+			for index in range(64):
+				var from: Vector2 = island.offset + Vector2.from_angle(TAU * index / 64.0) * (island.radius + ring * 12)
+				var to: Vector2 = island.offset + Vector2.from_angle(TAU * (index + 1) / 64.0) * (island.radius + ring * 12)
+				var clipped := preload("res://scripts/world/chart_geometry.gd").clip_circle(from, to, radius - 2)
+				if clipped.size() == 2: draw_line(center + clipped[0], center + clipped[1], Color(0.30, 0.58, 0.66, 0.24), 1, true)
+		preload("res://scripts/data/unit_glyph.gd").draw(self, center + island.offset, 30, island.family, Color("#92bba5"), "medium", 1, true)
 	_draw_sweep(center, radius)
 	var echo := center + Vector2(0.63, -0.77) * radius * 0.57
 	var pulse := Decay.energy(_echo_age, ECHO_LIFETIME_SECONDS)
@@ -77,5 +85,5 @@ func _island(center: Vector2, radius: float, flatten: float) -> void:
 			var edge := 1.0 + 0.13 * sin(angle * 4.0 + 0.7) + 0.07 * cos(angle * 7.0)
 			points.append(center + Vector2(cos(angle) * radius * contour_scale * edge, sin(angle) * radius * contour_scale * flatten * edge))
 		if contour == 0:
-			draw_colored_polygon(points, Color(0.14, 0.37, 0.22, 0.35))
+			draw_colored_polygon(points.slice(0, 64), Color(0.14, 0.37, 0.22, 0.35))
 		draw_polyline(points, Color(COAST, 0.42 - float(contour) * 0.1), 1.0, true)

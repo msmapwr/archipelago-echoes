@@ -18,12 +18,17 @@ var command_buttons: Array[Button] = []
 
 class HarborChart extends Control:
 	var navigation: RefCounted
+	var layout = preload("res://scripts/world/harbor_layout.gd").new()
 	func _point(value: Vector2) -> Vector2:
 		return Vector2(24, 24) + (value - Navigation.WATER_BOUNDS.position) * (size - Vector2(48, 48)) / Navigation.WATER_BOUNDS.size
 	func _draw() -> void:
 		if navigation == null:
 			return
 		draw_rect(Rect2(Vector2.ZERO, size), Color("#061b14"))
+		for contour in layout.contours:
+			for segment in contour.segments:
+				draw_line(_point(segment[0]), _point(segment[1]), Color("#355c64"), 1.0, true)
+			if not contour.segments.is_empty(): draw_string(get_theme_default_font(), _point(contour.segments[floori(contour.segments.size() * 0.5)][0]), "%dm" % contour.depth_m, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#76a2ad"))
 		for index in range(11):
 			var x := 24.0 + float(index) * (size.x - 48.0) / 10.0
 			draw_line(Vector2(x, 24), Vector2(x, size.y - 24), Color("#183b2a"))
@@ -38,9 +43,11 @@ class HarborChart extends Control:
 		for berth in range(3):
 			var y := -0.36 + berth * 0.22
 			draw_line(_point(Vector2(-0.55, y)), _point(Vector2(-0.32, y)), Color("#e8b968"), 3)
-			draw_string(get_theme_default_font(), _point(Vector2(-0.85, y)), "B%02d" % (berth + 1), HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("#bfd0bb"))
-			draw_rect(Rect2(_point(Vector2(-0.95, y - 0.12)), _point(Vector2(-0.66, y - 0.03)) - _point(Vector2(-0.95, y - 0.12))), Color("#55715a"), false, 2)
-		draw_string(get_theme_default_font(), _point(Vector2(-0.92, 0.24)), "码头 / 泊位", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color("#bfd0bb"))
+			draw_string(get_theme_default_font(), _point(Vector2(-0.28, y + 0.05)), "B%02d" % (berth + 1), HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#bfd0bb"))
+		for building in layout.buildings:
+			var point := _point(building.position_km)
+			preload("res://scripts/data/unit_glyph.gd").draw(self, point, 46, building.family, Color("#a7c5ab"), building.size_class, building.variant, true, building.get("component", ""))
+			draw_string(get_theme_default_font(), point + Vector2(26, 8), building.label, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#bfd0bb"))
 		draw_string(get_theme_default_font(), _point(Vector2(0.44, -0.60)), "防波堤", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color("#bfd0bb"))
 		var gate_left := _point(Vector2(-Navigation.EXIT_HALF_WIDTH_KM, Navigation.EXIT_Y_KM))
 		var gate_right := _point(Vector2(Navigation.EXIT_HALF_WIDTH_KM, Navigation.EXIT_Y_KM))
@@ -55,7 +62,7 @@ class HarborChart extends Control:
 		draw_line(ship + direction * 25, ship + direction * 36, Color("#a5f1ba"), 2)
 		draw_line(ship + direction * 36, ship + direction * 36 - direction.rotated(0.6) * 7, Color("#a5f1ba"), 2)
 		draw_line(ship + direction * 36, ship + direction * 36 - direction.rotated(-0.6) * 7, Color("#a5f1ba"), 2)
-		draw_string(get_theme_default_font(), Vector2(35, size.y - 4), "港区 2 km · 码头 / 防波堤", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("#a4c6af"))
+		draw_string(get_theme_default_font(), Vector2(35, size.y - 4), "港区 2 km · 建筑 / 泊位 · 蓝线为水深 m", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("#a4c6af"))
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS

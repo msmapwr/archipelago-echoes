@@ -153,6 +153,17 @@ Python 可复用模块：`runner.execute` 负责进程、超时、日志和结�
 
 ## 8. 验收入口
 
+海图截图使用固定首关种子 `270928`，命名状态在进程内冻结后截取。支持 `--resolution 1280x720|1600x900|1920x1080`（默认 1600×900）及 `--weak-crt`，只影响本次截图，不保存玩家设置。每次报告保留 `capture-settings.json`。
+
+```powershell
+python tools/dev.py capture harbor --resolution 1280x720
+python tools/dev.py capture chart-wide --resolution 1920x1080 --weak-crt
+python tools/dev.py capture chart-stale
+python tools/dev.py capture chart-silent
+```
+
+`chart-wide` 是仅用于审查设施分布的 100 km 视图，游戏正常量程仍为 12.5／25 km。图鉴用于灰度、尺寸与形态复查；静态海图资料不会随雷达静默消失，也不代表获得新的接触观测。
+
 | 行为 | 回归证据 |
 |---|---|
 | 假成功退出、缺标记、stderr／原生错误、超时、启动失败、空目录与参数安全 | `tools/tests/test_runner.py::RunnerTests` |
