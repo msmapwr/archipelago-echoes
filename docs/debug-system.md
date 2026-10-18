@@ -177,3 +177,5 @@ python tools/dev.py capture chart-silent
 工具不会自动提交、推送或部署，不修改 Git remote。检查通过之后仍需要审查 diff、更新 CHANGELOG，再按项目流程提交。
 
 2026-10-11 在 Windows、Python 3.11.15、Godot 4.7.2 验证：22 项 Python 测试、资源导入及全部 23 项 Godot smoke 通过；另通过 debug_log/menu_ui/p2_groups/mission_guidance 四项图形回归、五帧启动、火控与港口截图、日志分析、同状态比较和 ZIP 打包。debug_log 的目录失败与预算耗尽、p0 的非法模式警告属于主动覆盖的失败路径，保留在报告中。
+
+母舰航点：`capture ship-route`／`capture ship-route-arrived`。按 `ship_waypoint_ordered`／`ship_waypoint_rejected`／`ship_waypoint_cancelled`／`ship_waypoint_arrived` 查询，使用 `order_id` 关联。同类飞机事件仍以 `aircraft_navigation_` 开头，二者分开；详见 [母舰航点](ship-navigation.md)。

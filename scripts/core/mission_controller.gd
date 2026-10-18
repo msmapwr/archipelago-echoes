@@ -631,6 +631,19 @@ func command_ship(heading_degrees: float, speed_knots: float) -> bool:
 		return _reject("航行命令无效，请检查航向和航速范围")
 	return _accept("航行命令已接收；暂停时将在继续后执行" if get_tree().paused else "舰桥航行命令已生效")
 
+func set_ship_waypoint(position_km: Vector2) -> bool:
+	if not WorldState.set_ship_waypoint(position_km):
+		return _reject(WorldState.ship_waypoint_reason(position_km) if GameManager.mode in ["bridge", "configuration", "switching"] and GameManager.ship_afloat else "航点指派需要舰桥航行控制权")
+	state_changed.emit()
+	return _accept("母舰航点已排队；继续后执行" if get_tree().paused else "母舰执行直线航点；抵达后停车，手动操舵可接管")
+
+func cancel_ship_waypoint() -> bool:
+	if GameManager.mode not in ["bridge", "configuration", "switching"] or not GameManager.player_alive or not GameManager.ship_afloat:
+		return _reject("取消母舰航点需要舰桥航行控制权")
+	if not WorldState.cancel_ship_waypoint(): return _reject("母舰当前没有执行中的航点")
+	state_changed.emit()
+	return _accept("母舰航点已取消并停车")
+
 func set_sortie_ship_standby(enabled: bool) -> bool:
 	if GameManager.mode != "configuration":
 		return _reject("母舰托管方式只能在出击配置中选择")
@@ -920,6 +933,7 @@ func apply_navigation_damage(impact: Dictionary) -> void:
 func _check_ship_sunk() -> void:
 	if ship_health <= 0.0:
 		_clear_fire_control("ship_sunk")
+		WorldState.cancel_ship_waypoint("ship_sunk")
 		WorldState.set_ship_command(WorldState.ship_heading_degrees, 0.0)
 		GameManager.report_ship_sunk()
 		_feedback("母舰沉没；空中指挥官可转往友方机场" if aircraft_airborne else "母舰沉没，战役结束")
@@ -960,7 +974,7 @@ func _start_flight() -> void:
 	if sortie_ship_standby:
 		WorldState.set_ship_command(WorldState.ship_heading_degrees, 0.0)
 	EventBus.record("aircraft_launched", {"position_km": aircraft_position_km})
-	_feedback("隼影侦察机升空；母舰停车待命" if sortie_ship_standby else "隼影侦察机升空；舰艇由最后航行命令托管")
+	_feedback("隼影侦察机升空；母舰停车待命" if sortie_ship_standby else "隼影侦察机升空；母舰继续已下达的航行命令（航点抵达后停车）")
 
 func _advance_aircraft(delta: float) -> void:
 	aircraft_fuel_seconds = maxf(0.0, aircraft_fuel_seconds - delta)

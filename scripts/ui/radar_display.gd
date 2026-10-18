@@ -60,6 +60,8 @@ var gun_ready: bool = false
 var fire_control_assigned: bool = false
 var gun_range_km: float = 10.0
 var flight_navigation: bool = false
+var ship_waypoint_input := false
+var ship_route: Dictionary = {}
 var carrier_position_km: Vector2 = Vector2.ZERO
 var carrier_afloat: bool = true
 var airfield_position_km: Vector2 = Vector2.ZERO
@@ -90,6 +92,15 @@ func set_flight_navigation(enabled: bool, carrier: Vector2, afloat: bool, airfie
 	navigation_target_km = solution.get("position_km", own_position_km)
 	focus_mode = Control.FOCUS_ALL if enabled else Control.FOCUS_NONE
 	tooltip_text = "右键设置航点；聚焦雷达后用方向键定位、Enter 确认" if enabled else "点击回波选择接触"
+	queue_redraw()
+
+func set_ship_navigation(enabled: bool, solution: Dictionary) -> void:
+	if ship_waypoint_input != enabled: _keyboard_offset_km = Vector2.ZERO
+	ship_waypoint_input = enabled
+	ship_route = solution
+	if enabled:
+		focus_mode = Control.FOCUS_ALL
+		tooltip_text = "母舰航点：右键下令；聚焦后方向键定位、Enter 确认；直线航路需保留 2 m 余深"
 	queue_redraw()
 
 func point_to_world(local_point: Vector2) -> Vector2:
@@ -184,12 +195,13 @@ func clear_selection() -> void:
 	queue_redraw()
 
 func _gui_input(event: InputEvent) -> void:
-	if flight_navigation and event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
+	if (flight_navigation or ship_waypoint_input) and event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
 		if event.position.distance_to(size * 0.5) <= minf(size.x, size.y) * 0.435:
 			waypoint_requested.emit(point_to_world(event.position))
 			accept_event()
 		return
-	if flight_navigation and event is InputEventKey and event.pressed:
+	if (flight_navigation or ship_waypoint_input) and event is InputEventKey and event.pressed:
+		if event.is_echo() and event.keycode in [KEY_ENTER, KEY_KP_ENTER]: return
 		var step := display_range_km / 20.0
 		match event.keycode:
 			KEY_LEFT: _keyboard_offset_km.x -= step
@@ -231,6 +243,8 @@ func _draw() -> void:
 	_draw_ownship(center, radius)
 	if flight_navigation:
 		_draw_navigation(center, radius)
+	else:
+		_draw_ship_route(center, radius)
 	_draw_contact(center, radius)
 	_draw_prediction(center, radius)
 	_draw_ballistics(center, radius)
@@ -454,6 +468,19 @@ func _draw_navigation(center: Vector2, radius: float) -> void:
 		draw_line(point + Vector2(-10, 0), point + Vector2(10, 0), AMBER, 1.0)
 		draw_line(point + Vector2(0, -10), point + Vector2(0, 10), AMBER, 1.0)
 	if has_focus():
+		var cursor := center + _keyboard_offset_km * radius / display_range_km
+		draw_arc(cursor, 11.0, 0.0, TAU, 24, HOT, 1.0, true)
+
+func _draw_ship_route(center: Vector2, radius: float) -> void:
+	if ship_route.get("active", false) or ship_route.get("status", "") == "arrived":
+		var offset: Vector2 = ship_route.position_km - own_position_km
+		var point := center + (offset * radius / display_range_km).limit_length(radius - 18.0)
+		draw_line(center, point, Color(OWN_SHIP, 0.55), 1.0, true)
+		draw_rect(Rect2(point - Vector2.ONE * 6, Vector2.ONE * 12), OWN_SHIP, false, 1.5)
+		var label := "WP %.1f km" % offset.length() if offset.length() > display_range_km else "WP / STOP" if not ship_route.get("active", false) else "WP"
+		var label_offset := Vector2(12 if point.x < center.x + radius - 100 else -85, 21)
+		draw_string(ThemeDB.fallback_font, point + label_offset, label, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, OWN_SHIP)
+	if ship_waypoint_input and has_focus():
 		var cursor := center + _keyboard_offset_km * radius / display_range_km
 		draw_arc(cursor, 11.0, 0.0, TAU, 24, HOT, 1.0, true)
 

@@ -12,7 +12,7 @@ import sys
 from .analysis import bundle, filtered, native_diagnostics, read_logs, state_diff, summarize
 from .runner import discover_tests, execute, find_godot, godot_arguments, new_run, save_json, select_tests, PASS_MARKER
 
-CAPTURE_MODES = ("menu", "preparation", "settings", "generation", "tutorial", "background", "harbor", "harbor-east", "game", "chart-wide", "chart-stale", "chart-silent", "shoal-warning", "grounding", "wreck", "harbor-impact", "damage", "archive", "fire-control", "fire-archive", "lead-control", "lead-archive", "projectile", "splash", "splash-archive", "lock-control", "ammo-impact", "groups-control", "groups-archive", "enemy-withdrawal", "library", "guide-return", "sortie", "flight-nav")
+CAPTURE_MODES = ("menu", "preparation", "settings", "generation", "tutorial", "background", "harbor", "harbor-east", "game", "chart-wide", "chart-stale", "chart-silent", "ship-route", "ship-route-arrived", "shoal-warning", "grounding", "wreck", "harbor-impact", "damage", "archive", "fire-control", "fire-archive", "lead-control", "lead-archive", "projectile", "splash", "splash-archive", "lock-control", "ammo-impact", "groups-control", "groups-archive", "enemy-withdrawal", "library", "guide-return", "sortie", "flight-nav")
 
 
 def positive(value: str) -> float:

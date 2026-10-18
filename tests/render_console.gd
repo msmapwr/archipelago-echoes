@@ -27,7 +27,7 @@ func _capture() -> void:
 			trainer.perform("scan")
 			trainer.perform("select")
 		await create_timer(0.7, true).timeout
-	elif capture_mode in ["harbor", "harbor-east", "game", "chart-wide", "chart-stale", "chart-silent", "shoal-warning", "grounding", "wreck", "harbor-impact", "damage", "archive", "fire-control", "fire-archive", "lead-control", "lead-archive", "projectile", "splash", "splash-archive", "lock-control", "ammo-impact", "groups-control", "groups-archive", "enemy-withdrawal", "library", "guide-return", "sortie", "flight-nav"]:
+	elif capture_mode in ["harbor", "harbor-east", "game", "chart-wide", "chart-stale", "chart-silent", "ship-route", "ship-route-arrived", "shoal-warning", "grounding", "wreck", "harbor-impact", "damage", "archive", "fire-control", "fire-archive", "lead-control", "lead-archive", "projectile", "splash", "splash-archive", "lock-control", "ammo-impact", "groups-control", "groups-archive", "enemy-withdrawal", "library", "guide-return", "sortie", "flight-nav"]:
 		shell.get_node("StartButton").emit_signal("pressed")
 		for step in range(7):
 			if shell.get_node("GameCRTSlot/Preparation").stage == "tutorial":
@@ -146,6 +146,13 @@ func _capture() -> void:
 			if capture_mode == "chart-silent": mission.set_radar_emitting(false)
 			main._refresh_ui()
 			if capture_mode == "chart-wide": main.radar.set_display_range(100)
+		if capture_mode in ["ship-route", "ship-route-arrived"]:
+			var world: Node = root.get_node("WorldState")
+			var main: Control = shell.get_node("GameCRTSlot").get_child(0)
+			main.ship_route_button.button_pressed = true
+			root.get_node("MissionController").set_ship_waypoint(world.ship_position_km + Vector2(7, 0))
+			if capture_mode == "ship-route-arrived": root.get_node("WorldClock").advance(1500)
+			main._refresh_ui()
 		if capture_mode in ["shoal-warning", "grounding", "wreck"]:
 			var world: Node = root.get_node("WorldState")
 			var island: Dictionary = world.map.islands[0]
