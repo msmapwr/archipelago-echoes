@@ -3,6 +3,7 @@ extends Control
 signal contact_selected(contact_id: String)
 signal contact_deselected
 signal waypoint_requested(position_km: Vector2)
+signal ship_waypoint_append_requested(position_km: Vector2)
 
 const MAX_RANGE_KM := 25.0
 const DARK := Color("#031008")
@@ -27,6 +28,7 @@ var _coast_key: Array = []
 var _coast_polygons: Array[PackedVector2Array] = []
 var _depth_key: Array = []
 var _depth_lines: Array[PackedVector2Array] = []
+var _drawn_depth_labels: Array[Dictionary] = []
 var _marker_key: Array = []
 var _markers: Array[Dictionary] = []
 const ChartGeometry = preload("res://scripts/world/chart_geometry.gd")
@@ -100,7 +102,7 @@ func set_ship_navigation(enabled: bool, solution: Dictionary) -> void:
 	ship_route = solution
 	if enabled:
 		focus_mode = Control.FOCUS_ALL
-		tooltip_text = "母舰航点：右键下令；聚焦后方向键定位、Enter 确认；直线航路需保留 2 m 余深"
+		tooltip_text = "母舰航线：右键替换，Shift+右键追加；方向键 / Enter，Shift+Enter 追加；每段需 2 m 余深"
 	queue_redraw()
 
 func point_to_world(local_point: Vector2) -> Vector2:
@@ -197,7 +199,7 @@ func clear_selection() -> void:
 func _gui_input(event: InputEvent) -> void:
 	if (flight_navigation or ship_waypoint_input) and event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
 		if event.position.distance_to(size * 0.5) <= minf(size.x, size.y) * 0.435:
-			waypoint_requested.emit(point_to_world(event.position))
+			_request_waypoint(point_to_world(event.position), event.shift_pressed)
 			accept_event()
 		return
 	if (flight_navigation or ship_waypoint_input) and event is InputEventKey and event.pressed:
@@ -208,7 +210,7 @@ func _gui_input(event: InputEvent) -> void:
 			KEY_RIGHT: _keyboard_offset_km.x += step
 			KEY_UP: _keyboard_offset_km.y -= step
 			KEY_DOWN: _keyboard_offset_km.y += step
-			KEY_ENTER, KEY_KP_ENTER: waypoint_requested.emit(own_position_km + _keyboard_offset_km)
+			KEY_ENTER, KEY_KP_ENTER: _request_waypoint(own_position_km + _keyboard_offset_km, event.shift_pressed)
 			_: return
 		_keyboard_offset_km = _keyboard_offset_km.limit_length(display_range_km)
 		accept_event()
@@ -222,6 +224,12 @@ func _gui_input(event: InputEvent) -> void:
 			accept_event()
 		else:
 			clear_selection()
+
+func _request_waypoint(position_km: Vector2, append: bool) -> void:
+	if ship_waypoint_input and not flight_navigation and append:
+		ship_waypoint_append_requested.emit(position_km)
+	else:
+		waypoint_requested.emit(position_km)
 
 func _draw() -> void:
 	var center := size * 0.5
@@ -295,7 +303,8 @@ func _draw_depth_chart(center: Vector2, radius: float) -> void:
 				if clipped.size() == 2: _depth_lines.append(clipped)
 	for line in _depth_lines:
 		draw_line(center + line[0], center + line[1], Color(0.30, 0.58, 0.66, 0.28), 1.0, true)
-	for label in depth_chart_labels(radius):
+	_drawn_depth_labels = depth_chart_labels(radius)
+	for label in _drawn_depth_labels:
 		draw_string(ThemeDB.fallback_font, center + label.point, "%dm" % label.depth_m, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#668f96"))
 
 func depth_chart_labels(radius: float) -> Array[Dictionary]:
@@ -472,14 +481,42 @@ func _draw_navigation(center: Vector2, radius: float) -> void:
 		draw_arc(cursor, 11.0, 0.0, TAU, 24, HOT, 1.0, true)
 
 func _draw_ship_route(center: Vector2, radius: float) -> void:
-	if ship_route.get("active", false) or ship_route.get("status", "") == "arrived":
-		var offset: Vector2 = ship_route.position_km - own_position_km
-		var point := center + (offset * radius / display_range_km).limit_length(radius - 18.0)
-		draw_line(center, point, Color(OWN_SHIP, 0.55), 1.0, true)
-		draw_rect(Rect2(point - Vector2.ONE * 6, Vector2.ONE * 12), OWN_SHIP, false, 1.5)
-		var label := "WP %.1f km" % offset.length() if offset.length() > display_range_km else "WP / STOP" if not ship_route.get("active", false) else "WP"
-		var label_offset := Vector2(12 if point.x < center.x + radius - 100 else -85, 21)
-		draw_string(ThemeDB.fallback_font, point + label_offset, label, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, OWN_SHIP)
+	var points: Array = ship_route.get("points", [])
+	var previous := own_position_km
+	var occupied := _chart_tactical_rects(radius)
+	for marker in chart_facility_markers(radius):
+		occupied.append(marker.icon_rect.grow(3))
+		if marker.caption_visible: occupied.append(marker.caption_rect.grow(3))
+	for depth_label in _drawn_depth_labels: occupied.append(depth_label.rect.grow(2))
+	for index in range(points.size()):
+		var offset: Vector2 = (points[index] - own_position_km) * radius / display_range_km
+		var from: Vector2 = (previous - own_position_km) * radius / display_range_km
+		var clipped := ChartGeometry.clip_circle(from, offset, radius - 2)
+		if clipped.size() == 2: draw_line(center + clipped[0], center + clipped[1], Color(OWN_SHIP, 0.55 if index == 0 else 0.32), 1.0, true)
+		previous = points[index]
+		if offset.length() > radius and index > 0: continue
+		var point := center + offset.limit_length(radius - 18)
+		var tint := OWN_SHIP if index == 0 else Color("#65858c")
+		draw_rect(Rect2(point - Vector2.ONE * 5, Vector2.ONE * 10), tint, false, 1.5)
+		var number: int = ship_route.get("reached", 0) + index + 1
+		var label := "WP%d" % number
+		if offset.length() > radius: label += " %.1f km" % points[index].distance_to(own_position_km)
+		var label_size := ThemeDB.fallback_font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 13)
+		for label_offset in [Vector2(10, 19), Vector2(-label_size.x - 10, 19), Vector2(10, -12), Vector2(-label_size.x - 10, -12)]:
+			var baseline: Vector2 = point - center + label_offset
+			var rect := Rect2(baseline - Vector2(0, label_size.y), label_size).grow(2)
+			var free := true
+			for corner in [rect.position, rect.end, Vector2(rect.position.x, rect.end.y), Vector2(rect.end.x, rect.position.y)]:
+				if corner.length() > radius - 2: free = false
+			for blocked in occupied:
+				if blocked.intersects(rect): free = false
+			if not free: continue
+			draw_string(ThemeDB.fallback_font, center + baseline, label, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, tint)
+			occupied.append(rect)
+			break
+	if ship_route.get("status", "") == "arrived":
+		draw_rect(Rect2(center - Vector2.ONE * 6, Vector2.ONE * 12), OWN_SHIP, false, 1.5)
+		draw_string(ThemeDB.fallback_font, center + Vector2(12, 21), "WP / STOP", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, OWN_SHIP)
 	if ship_waypoint_input and has_focus():
 		var cursor := center + _keyboard_offset_km * radius / display_range_km
 		draw_arc(cursor, 11.0, 0.0, TAU, 24, HOT, 1.0, true)

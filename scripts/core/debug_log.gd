@@ -137,7 +137,7 @@ func snapshot() -> Dictionary:
 		"UserSettings": ["tutorial_completed", "skip_tutorial_by_default", "tutorial_progress_error"],
 		"GameManager": ["mode", "player_alive", "ship_afloat", "target_identified", "player_recovered", "recovery_site", "task_settled", "last_death_reason"],
 		"WorldClock": ["elapsed_seconds", "time_scale"],
-		"WorldState": ["scenario_seed", "ship_position_km", "ship_heading_degrees", "ship_speed_knots", "contact_position_km", "ship_draft_m", "ship_grounded", "last_navigation_impact", "ship_waypoint_active", "ship_waypoint_km", "ship_waypoint_status", "ship_waypoint_order_id"],
+		"WorldState": ["scenario_seed", "ship_position_km", "ship_heading_degrees", "ship_speed_knots", "contact_position_km", "ship_draft_m", "ship_grounded", "last_navigation_impact", "ship_waypoint_active", "ship_waypoint_km", "ship_waypoint_status", "ship_waypoint_order_id", "ship_route_points", "ship_route_reached", "ship_route_revision"],
 		"MissionController": ["ship_health", "enemy_health", "enemy_alive", "enemy_heading_degrees", "enemy_speed_knots", "enemy_tracking_ship", "radar_emitting", "contact_visible", "contact_scan_count", "last_contact_position_km", "last_contact_seconds", "fire_control_target_id", "fire_control_order_id", "fire_control_aim_mode", "fire_control_locked", "lock_status", "selected_mount_id", "selected_ammunition_id", "ship_ammo", "next_ship_fire_seconds", "turret_heading_degrees", "fire_control_correction_km", "repair_teams", "repair_seconds_remaining", "projectiles", "last_gun_impact", "aircraft_airborne", "aircraft_position_km", "aircraft_fuel_seconds", "aircraft_destination", "sorties_launched", "switch_seconds_remaining", "last_message"]}
 	for node_name in fields:
 		var node := get_node_or_null("/root/" + node_name)

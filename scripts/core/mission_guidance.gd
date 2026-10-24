@@ -122,6 +122,6 @@ static func project(state: Dictionary) -> Dictionary:
 		elif result.warning.is_empty() and state.get("navigation_grounded", false): result.warning = "母舰搁浅并已停车；可在窗口内回收，或改航机场。"
 	if mode in ["bridge", "configuration"] and result.warning.is_empty():
 		if state.get("ship_route_status", "") == "interrupted": result.warning = "母舰航点中断并停车；检查浅水与岸线，重新下达安全航点。"
-		elif state.get("ship_route_active", false): result.next += " 母舰正执行航点，到点停车；操舵会接管航点。"
+		elif state.get("ship_route_active", false): result.next += " 母舰正执行航点（余 %d），终点停车。" % state.get("ship_route_remaining", 1)
 		elif state.get("ship_route_status", "") == "arrived": result.next += " 母舰已抵达航点并停车。"
 	return result

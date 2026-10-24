@@ -53,6 +53,8 @@ var sortie_details: Label
 var standby_checkbox: CheckBox
 var standby_button: Button
 var cancel_return_button: Button
+var ship_route_append: CheckBox
+var trim_ship_route_button: Button
 var ship_route_button: Button
 var cancel_ship_route_button: Button
 var ship_route_status: Label
@@ -71,7 +73,9 @@ func _ready() -> void:
 	radar.contact_deselected.connect(_on_contact_deselected)
 	radar.waypoint_requested.connect(func(position_km: Vector2) -> void:
 		if radar.flight_navigation: MissionController.set_aircraft_waypoint(position_km)
-		elif radar.ship_waypoint_input: MissionController.set_ship_waypoint(position_km))
+		elif radar.ship_waypoint_input: MissionController.set_ship_waypoint(position_km, ship_route_append.button_pressed))
+	radar.ship_waypoint_append_requested.connect(func(position_km: Vector2) -> void:
+		if radar.ship_waypoint_input: MissionController.set_ship_waypoint(position_km, true))
 	MissionController.state_changed.connect(_refresh_ui)
 	MissionController.feedback_changed.connect(_on_feedback_changed)
 	WorldClock.time_advanced.connect(_on_world_time_advanced)
@@ -168,11 +172,25 @@ func _build_navigation_readout() -> void:
 	cancel_ship_route_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	cancel_ship_route_button.pressed.connect(func() -> void: MissionController.cancel_ship_waypoint())
 	row.add_child(cancel_ship_route_button)
+	var edit_row := HBoxContainer.new()
+	edit_row.name = "ShipRouteEdit"
+	ship_controls.add_child(edit_row)
+	ship_controls.move_child(edit_row, row.get_index() + 1)
+	ship_route_append = CheckBox.new()
+	ship_route_append.text = "追加航点"
+	ship_route_append.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	edit_row.add_child(ship_route_append)
+	trim_ship_route_button = Button.new()
+	trim_ship_route_button.text = "撤回末点"
+	trim_ship_route_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	trim_ship_route_button.pressed.connect(func() -> void: MissionController.remove_last_ship_waypoint())
+	edit_row.add_child(trim_ship_route_button)
 	ship_route_status = Label.new()
+	ship_route_status.mouse_filter = Control.MOUSE_FILTER_PASS
 	ship_route_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	ship_route_status.add_theme_font_size_override("font_size", 16)
 	ship_controls.add_child(ship_route_status)
-	ship_controls.move_child(ship_route_status, row.get_index() + 1)
+	ship_controls.move_child(ship_route_status, edit_row.get_index() + 1)
 	under_keel = Label.new()
 	under_keel.mouse_filter = Control.MOUSE_FILTER_PASS
 	under_keel.position = Vector2(12, 8)
@@ -303,6 +321,7 @@ func guidance_state() -> Dictionary:
 	state.navigation_warning = WorldState.navigation_risk().warning
 	state.navigation_grounded = WorldState.ship_grounded
 	state.navigation_loss = MissionController.ship_loss_cause
+	state.ship_route_remaining = WorldState.ship_route_points.size()
 	state.ship_route_active = WorldState.ship_waypoint_active
 	state.ship_route_status = WorldState.ship_waypoint_status
 	return state
@@ -755,14 +774,21 @@ func _refresh_ship() -> void:
 	var can_command := GameManager.mode in ["bridge", "configuration", "switching"] and GameManager.ship_afloat and GameManager.player_alive
 	ship_route_button.get_parent().visible = GameManager.mode == "bridge"
 	ship_route_status.visible = GameManager.mode == "bridge"
+	ship_route_append.get_parent().visible = GameManager.mode == "bridge" and ship_route_button.button_pressed
+	ship_route_append.disabled = not can_command or WorldState.ship_grounded
+	trim_ship_route_button.disabled = not can_command or not route.active
 	ship_route_button.disabled = not can_command or WorldState.ship_grounded
 	cancel_ship_route_button.disabled = not can_command or not route.active
 	ship_route_status.text = "直线航点 · 当前航速 / 停船默认 10 kn · 到点停车"
 	if route.active:
-		ship_route_status.text = "航点 %.2f km / 约 %.1f 分 · 离舰后继续" % [route.distance_km, route.eta_seconds / 60.0]
+		ship_route_status.text = "余 %d 点 / %.2f km / 约 %.1f 分 · 离舰后继续" % [route.remaining, route.distance_km, route.eta_seconds / 60.0]
 	elif route.status == "arrived": ship_route_status.text = "航点已抵达 / 已停车；可另选航点或手动接管"
 	elif route.status == "interrupted": ship_route_status.text = "航点中断 / 已停车；检查航路后重新下令"
-	if ship_route_button.button_pressed and can_command: ship_route_status.text += "\n右键下令；方向键 / Enter；需 2 m 余深"
+	if ship_route_button.button_pressed and can_command: ship_route_status.text += "\n右键 / Enter；Shift 追加；最多 8 点"
+	var point_lines: PackedStringArray = ["待执行航线（各段需吃水 + 2 m）"]
+	for index in range(route.points.size()):
+		point_lines.append("WP%d  E %.2f / S %.2f" % [route.reached + index + 1, route.points[index].x, route.points[index].y])
+	ship_route_status.tooltip_text = "\n".join(point_lines)
 	_button("ShipControls/SpeedControls/SpeedUp").text = "加速 %.0f kn" % WorldState.navigation_speed_step()
 	_button("ShipControls/SpeedControls/SlowDown").text = "减速 %.0f kn" % WorldState.navigation_speed_step()
 	# Put recovery controls ahead of optional combat when navigation needs attention.
@@ -800,7 +826,7 @@ func _refresh_flight() -> void:
 	else:
 		flight_details.add_theme_color_override("font_color", Color("#a2c0a9"))
 	flight_details.text += "\n母舰 %.0f%% · 损管 %s" % [MissionController.ship_health, "剩余 %.0f 秒" % ceilf(MissionController.repair_seconds_remaining) if MissionController.repair_seconds_remaining > 0.0 else "待命 %d 组" % MissionController.repair_teams]
-	if WorldState.ship_waypoint_active: flight_details.text += "\n母舰航点 %.1f km / 约 %.1f 分 · 到点停车" % [WorldState.ship_route_solution().distance_km, WorldState.ship_route_solution().eta_seconds / 60.0]
+	if WorldState.ship_waypoint_active: flight_details.text += "\n母舰航线余 %d 点 / %.1f km / 约 %.1f 分" % [WorldState.ship_route_points.size(), WorldState.ship_route_solution().distance_km, WorldState.ship_route_solution().eta_seconds / 60.0]
 	flight_details.text += "\n右键设航点；雷达聚焦后方向键 / Enter"
 
 func _refresh_debrief() -> void:
@@ -843,7 +869,7 @@ func _event_line(event: Dictionary) -> String:
 		"fire_control_correction": return "校射修正 / %s · %.0f m" % [details_data.get("order_id", ""), (details_data.get("correction_km", Vector2.ZERO) as Vector2).length() * 1000]
 		"fire_control_aim_mode_changed": return "甲板炮瞄准 / %s · %s" % ["运动提前量" if details_data.get("aim_mode", "observed") == "lead" else "最后观测", details_data.get("order_id", "未指派")]
 		"fire_control_assigned": return "甲板炮指派 A1 / %s%s" % [details_data.get("order_id", ""), " · 暂停排队" if details_data.get("queued", false) else ""]
-		"fire_control_cleared": return "甲板炮撤销 A1 / %s · %s" % [details_data.get("order_id", ""), {"player_cancelled":"玩家撤销", "target_destroyed":"目标失能", "ship_sunk":"母舰沉没", "action_ended":"行动结束"}.get(details_data.get("reason", ""), "指派终止")]
+		"fire_control_cleared": return "甲板炮撤销 A1 / %s · %s" % [details_data.get("order_id", ""), {"player_cancelled":"玩家撤销", "target_destroyed":"目标失能", "ship_sunk":"母舰沉没", "action_ended":"行动结束", "last_point_removed":"撤回最后航点"}.get(details_data.get("reason", ""), "指派终止")]
 		"fire_control_rejected": return {"clear":"火控撤销拒绝 / ", "aim_mode":"瞄准切换拒绝 / ", "correction":"校射修正拒绝 / ", "lock":"照射拒绝 / ", "ammunition":"换弹拒绝 / ", "group":"炮组拒绝 / "}.get(details_data.get("action", ""), "火控指派拒绝 / ") + str(details_data.get("order_id", "")) + " · " + str(details_data.get("reason", ""))
 		"ship_gun_rejected": return "甲板炮射击拒绝 / %s · %s" % [details_data.get("order_id", "未指派"), details_data.get("reason", "")]
 		"contact_discovered": return "A1 回波发现"
@@ -856,8 +882,11 @@ func _event_line(event: Dictionary) -> String:
 		"target_identified", "aircraft_recon": return "A1 情报确认"
 		"ship_navigation_command": return "航行命令 %03d° / %.0f kn" % [roundi(details_data.get("heading_degrees", 0.0)), details_data.get("speed_knots", 0.0)]
 		"ship_waypoint_ordered": return "母舰航点 %s · E %.2f / S %.2f · %.0f kn" % [details_data.get("order_id", ""), details_data.get("position_km", Vector2.ZERO).x, details_data.get("position_km", Vector2.ZERO).y, details_data.get("speed_knots", 0)]
+		"ship_route_appended": return "母舰追加航点 · %s / R%d · 余 %d 点" % [details_data.get("order_id", ""), details_data.get("revision", 0), details_data.get("remaining", 0)]
+		"ship_route_trimmed": return "母舰撤回末点 · %s / R%d · 余 %d 点" % [details_data.get("order_id", ""), details_data.get("revision", 0), details_data.get("remaining", 0)]
+		"ship_waypoint_reached": return "母舰通过 WP%d · %s · 余 %d 点" % [details_data.get("index", 0), details_data.get("order_id", ""), details_data.get("remaining", 0)]
 		"ship_waypoint_arrived": return "母舰航点抵达 / 已停车 · " + details_data.get("order_id", "")
-		"ship_waypoint_cancelled": return "母舰航点终止 · %s · %s" % [details_data.get("order_id", ""), {"manual_override":"手动接管", "player_cancelled":"主动撤销", "replaced":"新航点替换", "hazard":"航路受阻", "ship_sunk":"母舰沉没", "action_ended":"行动结束"}.get(details_data.get("reason", ""), details_data.get("reason", ""))]
+		"ship_waypoint_cancelled": return "母舰航点终止 · %s · %s" % [details_data.get("order_id", ""), {"manual_override":"手动接管", "player_cancelled":"主动撤销", "replaced":"新航点替换", "hazard":"航路受阻", "ship_sunk":"母舰沉没", "action_ended":"行动结束", "last_point_removed":"撤回最后航点"}.get(details_data.get("reason", ""), details_data.get("reason", ""))]
 		"ship_waypoint_rejected": return "母舰航点拒绝 / " + details_data.get("reason", "")
 		"ship_navigation_blocked": return "航路受阻，舰艇停车"
 		"ship_grounded": return "母舰搁浅 · 触浅水深 %.1f m · 航速 %.0f kn" % [details_data.get("depth_m", 0), details_data.get("speed_knots", 0)]

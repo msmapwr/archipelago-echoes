@@ -631,11 +631,18 @@ func command_ship(heading_degrees: float, speed_knots: float) -> bool:
 		return _reject("航行命令无效，请检查航向和航速范围")
 	return _accept("航行命令已接收；暂停时将在继续后执行" if get_tree().paused else "舰桥航行命令已生效")
 
-func set_ship_waypoint(position_km: Vector2) -> bool:
-	if not WorldState.set_ship_waypoint(position_km):
-		return _reject(WorldState.ship_waypoint_reason(position_km) if GameManager.mode in ["bridge", "configuration", "switching"] and GameManager.ship_afloat else "航点指派需要舰桥航行控制权")
+func set_ship_waypoint(position_km: Vector2, append: bool = false) -> bool:
+	if not WorldState.set_ship_waypoint(position_km, append):
+		return _reject(WorldState.ship_waypoint_reason(position_km, append) if GameManager.mode in ["bridge", "configuration", "switching"] and GameManager.ship_afloat else "航点指派需要舰桥航行控制权")
 	state_changed.emit()
-	return _accept("母舰航点已排队；继续后执行" if get_tree().paused else "母舰执行直线航点；抵达后停车，手动操舵可接管")
+	return _accept("母舰航点已排队；继续后执行" if get_tree().paused else "母舰航线已更新；顺序通过航点，终点停车，手动操舵可接管")
+
+func remove_last_ship_waypoint() -> bool:
+	if GameManager.mode not in ["bridge", "configuration", "switching"] or not GameManager.player_alive or not GameManager.ship_afloat:
+		return _reject("编辑母舰航线需要舰桥航行控制权")
+	if not WorldState.remove_last_ship_waypoint(): return _reject("当前没有待执行航点")
+	state_changed.emit()
+	return _accept("末点已撤回；保留前段航线" if WorldState.ship_waypoint_active else "最后一个航点已撤回，母舰停车")
 
 func cancel_ship_waypoint() -> bool:
 	if GameManager.mode not in ["bridge", "configuration", "switching"] or not GameManager.player_alive or not GameManager.ship_afloat:

@@ -19,6 +19,10 @@ var ship_max_speed_knots: float = 0.0
 var _last_clock_seconds: float = 0.0
 var scenario_seed: int = FIRST_SCENARIO_SEED
 var generation_error: String = ""
+const MAX_SHIP_ROUTE_POINTS := 8
+var ship_route_points: Array[Vector2] = []
+var ship_route_reached := 0
+var ship_route_revision := 0
 var ship_waypoint_active := false
 var ship_waypoint_km := Vector2.ZERO
 var ship_waypoint_status := "manual"
@@ -64,6 +68,9 @@ func load_first_scenario(map_seed: int = FIRST_SCENARIO_SEED) -> bool:
 	ship_draft_m = ship.draft_m
 	ship_grounded = false
 	ship_waypoint_active = false
+	ship_route_points.clear()
+	ship_route_reached = 0
+	ship_route_revision = 0
 	ship_waypoint_km = Vector2.ZERO
 	ship_waypoint_status = "manual"
 	ship_waypoint_order_id = ""
@@ -98,30 +105,39 @@ func set_ship_command(heading_degrees: float, speed_knots: float) -> bool:
 	_record_navigation_warning()
 	return true
 
-func ship_waypoint_reason(target: Vector2) -> String:
+func ship_waypoint_reason(target: Vector2, append: bool = false) -> String:
 	if map == null or not is_finite(target.x) or not is_finite(target.y): return "航点坐标无效"
 	if not Rect2(Vector2.ZERO, map.MAP_SIZE_KM).has_point(target): return "航点超出海图边界"
 	if ship_grounded: return "搁浅时请先手动低速脱浅"
-	if target.distance_to(ship_position_km) < 0.05: return "航点距离至少 50 m"
-	if not Hazards.trace(ship_position_km, target, ship_draft_m + 2.0, map.depth_at, Rect2(Vector2.ZERO, map.MAP_SIZE_KM)).is_empty():
+	if append and ship_waypoint_active and ship_route_points.size() >= MAX_SHIP_ROUTE_POINTS: return "航线最多保留 8 个待执行航点"
+	var origin := ship_route_points[-1] if append and ship_waypoint_active else ship_position_km
+	if target.distance_to(origin) < 0.05: return "相邻航点距离至少 50 m"
+	if not Hazards.trace(origin, target, ship_draft_m + 2.0, map.depth_at, Rect2(Vector2.ZERO, map.MAP_SIZE_KM)).is_empty():
 		return "直线航路穿过浅水或岸线；请另选航点（要求 2 m 余深）"
 	return ""
 
-func set_ship_waypoint(target: Vector2) -> bool:
-	var reason := ship_waypoint_reason(target)
+func set_ship_waypoint(target: Vector2, append: bool = false) -> bool:
+	var reason := ship_waypoint_reason(target, append)
 	if not GameManager.ship_afloat or not GameManager.player_alive or GameManager.mode not in ["bridge", "configuration", "switching"]:
 		reason = "航点指派需要舰桥航行控制权"
 	if not reason.is_empty():
-		EventBus.record("ship_waypoint_rejected", {"reason":reason})
+		EventBus.record("ship_waypoint_rejected", {"reason":reason, "order_id":ship_waypoint_order_id, "append":append})
 		return false
+	if append and ship_waypoint_active:
+		ship_route_points.append(target)
+		ship_route_revision += 1
+		EventBus.record("ship_route_appended", {"order_id":ship_waypoint_order_id, "revision":ship_route_revision, "position_km":target, "remaining":ship_route_points.size(), "queued":get_tree().paused})
+		ship_command_changed.emit(ship_heading_degrees, ship_speed_knots)
+		return true
 	cancel_ship_waypoint("replaced", false)
 	_waypoint_sequence += 1
 	ship_waypoint_order_id = "ship_route.%03d" % _waypoint_sequence
-	ship_waypoint_km = target
+	ship_route_points.assign([target])
+	ship_route_reached = 0
+	ship_route_revision = 1
 	ship_waypoint_active = true
 	ship_waypoint_status = "enroute"
-	var offset := target - ship_position_km
-	ship_heading_degrees = fposmod(rad_to_deg(atan2(offset.x, -offset.y)), 360.0)
+	_point_ship_at_next_waypoint()
 	if ship_speed_knots <= 0: ship_speed_knots = minf(10.0, ship_max_speed_knots)
 	EventBus.record("ship_waypoint_ordered", {"order_id":ship_waypoint_order_id, "position_km":target, "speed_knots":ship_speed_knots, "queued":get_tree().paused})
 	EventBus.command_issued.emit(ship_waypoint_order_id)
@@ -129,9 +145,24 @@ func set_ship_waypoint(target: Vector2) -> bool:
 	_record_navigation_warning()
 	return true
 
+func _point_ship_at_next_waypoint() -> void:
+	ship_waypoint_km = ship_route_points[0]
+	var offset := ship_waypoint_km - ship_position_km
+	ship_heading_degrees = fposmod(rad_to_deg(atan2(offset.x, -offset.y)), 360.0)
+
+func remove_last_ship_waypoint() -> bool:
+	if not ship_waypoint_active: return false
+	if ship_route_points.size() == 1: return cancel_ship_waypoint("last_point_removed")
+	var removed: Vector2 = ship_route_points.pop_back()
+	ship_route_revision += 1
+	EventBus.record("ship_route_trimmed", {"order_id":ship_waypoint_order_id, "revision":ship_route_revision, "position_km":removed, "remaining":ship_route_points.size()})
+	ship_command_changed.emit(ship_heading_degrees, ship_speed_knots)
+	return true
+
 func cancel_ship_waypoint(reason: String = "player_cancelled", stop: bool = true) -> bool:
 	if not ship_waypoint_active: return false
 	ship_waypoint_active = false
+	ship_route_points.clear()
 	ship_waypoint_status = "interrupted" if reason in ["hazard", "ship_sunk"] else "cancelled"
 	if stop: ship_speed_knots = 0
 	EventBus.record("ship_waypoint_cancelled", {"order_id":ship_waypoint_order_id, "reason":reason, "position_km":ship_position_km})
@@ -139,8 +170,12 @@ func cancel_ship_waypoint(reason: String = "player_cancelled", stop: bool = true
 	return true
 
 func ship_route_solution() -> Dictionary:
-	var distance := ship_position_km.distance_to(ship_waypoint_km)
-	return {"active":ship_waypoint_active, "status":ship_waypoint_status, "position_km":ship_waypoint_km, "order_id":ship_waypoint_order_id, "distance_km":distance, "eta_seconds":distance / (ship_speed_knots * KNOT_TO_KM_PER_SECOND) if ship_waypoint_active and ship_speed_knots > 0 else 0.0}
+	var distance := 0.0
+	var previous := ship_position_km
+	for point in ship_route_points:
+		distance += previous.distance_to(point)
+		previous = point
+	return {"active":ship_waypoint_active, "status":ship_waypoint_status, "position_km":ship_waypoint_km, "order_id":ship_waypoint_order_id, "distance_km":distance, "points":ship_route_points.duplicate(), "remaining":ship_route_points.size(), "reached":ship_route_reached, "revision":ship_route_revision, "eta_seconds":distance / (ship_speed_knots * KNOT_TO_KM_PER_SECOND) if ship_waypoint_active and ship_speed_knots > 0 else 0.0}
 
 func _on_mode_changed(_previous: String, current: String) -> void:
 	if current in ["settlement", "campaign_failed", "recovered"]:
@@ -164,17 +199,45 @@ func _on_world_time_advanced(total_seconds: float) -> void:
 	_last_clock_seconds = total_seconds
 	if delta <= 0.0 or ship_speed_knots <= 0.0 or map == null or not GameManager.ship_afloat or GameManager.mode in ["settlement", "campaign_failed"]:
 		return
-	var direction := Vector2(sin(deg_to_rad(ship_heading_degrees)), -cos(deg_to_rad(ship_heading_degrees)))
-	var destination := ship_position_km + direction * ship_speed_knots * KNOT_TO_KM_PER_SECOND * delta
-	var arriving := ship_waypoint_active and destination.distance_to(ship_position_km) >= ship_waypoint_km.distance_to(ship_position_km)
-	if arriving: destination = ship_waypoint_km
+	var remaining := delta
+	# Every completed leg consumes one of at most eight pending points.
+	while remaining > 0.000001 and ship_speed_knots > 0:
+		var direction := Vector2(sin(deg_to_rad(ship_heading_degrees)), -cos(deg_to_rad(ship_heading_degrees)))
+		var speed_km_s := ship_speed_knots * KNOT_TO_KM_PER_SECOND
+		var leg_seconds := remaining
+		var arriving := false
+		if ship_waypoint_active:
+			var seconds_to_point := ship_position_km.distance_to(ship_waypoint_km) / speed_km_s
+			arriving = remaining >= seconds_to_point
+			if arriving: leg_seconds = seconds_to_point
+		var destination := ship_waypoint_km if arriving else ship_position_km + direction * speed_km_s * leg_seconds
+		if not _move_ship_segment(destination, leg_seconds): return
+		remaining = maxf(0, remaining - leg_seconds)
+		if not arriving: break
+		ship_route_points.pop_front()
+		ship_route_reached += 1
+		var arrival_seconds := total_seconds - remaining
+		var details := {"order_id":ship_waypoint_order_id, "revision":ship_route_revision, "index":ship_route_reached, "position_km":ship_position_km, "remaining":ship_route_points.size()}
+		if ship_route_points.is_empty():
+			ship_waypoint_active = false
+			ship_waypoint_status = "arrived"
+			ship_speed_knots = 0
+			EventBus.record("ship_waypoint_arrived", details, arrival_seconds)
+		else:
+			_point_ship_at_next_waypoint()
+			EventBus.record("ship_waypoint_reached", details, arrival_seconds)
+		ship_command_changed.emit(ship_heading_degrees, ship_speed_knots)
+	_record_navigation_warning()
+	ship_position_changed.emit(ship_position_km)
+
+func _move_ship_segment(destination: Vector2, seconds: float) -> bool:
 	var impact := Hazards.trace(ship_position_km, destination, ship_draft_m, map.depth_at, Rect2(Vector2.ZERO, map.MAP_SIZE_KM), ship_grounded)
 	if not impact.is_empty():
 		var speed := ship_speed_knots
 		cancel_ship_waypoint("hazard", false)
 		impact.origin_position_km = ship_position_km
 		impact.requested_position_km = destination
-		impact.step_seconds = delta
+		impact.step_seconds = seconds
 		# Map boundary is an interface limit, not a physical coastline.
 		if impact.kind != "boundary": ship_position_km = impact.position
 		ship_speed_knots = 0.0
@@ -190,19 +253,12 @@ func _on_world_time_advanced(total_seconds: float) -> void:
 		if impact.kind != "boundary":
 			EventBus.record("ship_grounded" if impact.kind == "grounding" else "ship_collision", impact)
 			navigation_impact.emit(impact)
-		return
+		return false
 	ship_position_km = destination
-	if arriving:
-		ship_waypoint_active = false
-		ship_waypoint_status = "arrived"
-		ship_speed_knots = 0
-		EventBus.record("ship_waypoint_arrived", {"order_id":ship_waypoint_order_id, "position_km":ship_position_km})
-		ship_command_changed.emit(ship_heading_degrees, ship_speed_knots)
 	if ship_grounded and map.depth_at(destination) >= ship_draft_m + 1.0:
 		ship_grounded = false
 		EventBus.record("ship_refloated", {"position_km":destination})
-	_record_navigation_warning()
-	ship_position_changed.emit(ship_position_km)
+	return true
 
 func _record_navigation_warning() -> void:
 	var warning: String = navigation_risk().warning
@@ -211,7 +267,7 @@ func _record_navigation_warning() -> void:
 		EventBus.record("navigation_warning_changed", {"warning":warning, "position_km":ship_position_km})
 
 func navigation_risk() -> Dictionary:
-	var key := [ship_position_km, ship_heading_degrees, ship_speed_knots, ship_draft_m, ship_grounded, scenario_seed]
+	var key := [ship_position_km, ship_heading_degrees, ship_speed_knots, ship_draft_m, ship_grounded, scenario_seed, ship_route_revision, ship_waypoint_active]
 	if key == _risk_key: return _risk_cache
 	_risk_key = key
 	_risk_cache = _compute_navigation_risk()
@@ -222,7 +278,18 @@ func _compute_navigation_risk() -> Dictionary:
 	var depth: float = map.depth_at(ship_position_km)
 	if ship_grounded: return {"warning":"搁浅 / 已停车：转向深水，以不超过 4 kn 脱浅；损管不会自动脱浅。", "depth_m":depth}
 	if ship_speed_knots > 0:
-		var ahead := ship_position_km + Vector2.UP.rotated(deg_to_rad(ship_heading_degrees)) * ship_speed_knots * KNOT_TO_KM_PER_SECOND * 60
-		var risk := Hazards.trace(ship_position_km, ahead, ship_draft_m + 2, map.depth_at, Rect2(Vector2.ZERO, map.MAP_SIZE_KM))
-		if not risk.is_empty(): return {"warning":"航行警报：前方浅水 / 岸线，请减速转向。" if risk.kind != "boundary" else "前方为海图边界，请转向。", "depth_m":depth}
+		var distance_left := ship_speed_knots * KNOT_TO_KM_PER_SECOND * 60
+		var ahead := ship_position_km + Vector2.UP.rotated(deg_to_rad(ship_heading_degrees)) * distance_left
+		var targets: Array[Vector2] = []
+		if ship_waypoint_active: targets.assign(ship_route_points)
+		else: targets.append(ahead)
+		var previous := ship_position_km
+		for target in targets:
+			var offset := target - previous
+			var endpoint := previous + offset.limit_length(distance_left)
+			var risk := Hazards.trace(previous, endpoint, ship_draft_m + 2, map.depth_at, Rect2(Vector2.ZERO, map.MAP_SIZE_KM))
+			if not risk.is_empty(): return {"warning":"航行警报：前方浅水 / 岸线，请减速转向。" if risk.kind != "boundary" else "前方为海图边界，请转向。", "depth_m":depth}
+			distance_left -= offset.length()
+			if distance_left <= 0: break
+			previous = target
 	return {"warning":"", "depth_m":depth}
