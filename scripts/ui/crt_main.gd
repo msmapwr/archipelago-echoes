@@ -100,7 +100,7 @@ func _build_fire_control_ui() -> void:
 	details.add_child(fire_control_actions)
 	details.move_child(fire_control_actions, details.get_node("RadarActions").get_index() + 1)
 	assign_target_button = Button.new()
-	assign_target_button.text = "指派目标 → 甲板炮"
+	assign_target_button.text = "② 指派 → 甲板炮"
 	assign_target_button.custom_minimum_size.y = 38
 	assign_target_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	assign_target_button.pressed.connect(func() -> void: MissionController.assign_fire_control_target(selected_contact_id))
@@ -553,7 +553,7 @@ func _toggle_pause() -> void:
 func _toggle_time_scale() -> void:
 	if archive.visible or unit_library.visible or GameManager.mode in ["settlement", "campaign_failed"]:
 		return
-	WorldClock.set_time_scale(10.0 if WorldClock.time_scale == 1.0 else 1.0)
+	WorldClock.set_time_scale(10.0 if WorldClock.time_scale == 1.0 else 50.0 if WorldClock.time_scale == 10.0 else 1.0)
 	_refresh_ui()
 
 func _on_world_time_advanced(total_seconds: float) -> void:
@@ -601,6 +601,10 @@ func _on_navigation_blocked(_position: Vector2) -> void:
 
 func _on_feedback_changed(message: String) -> void:
 	action_status.text = message
+	action_status.tooltip_text = message
+	action_status.add_theme_font_size_override("font_size", 19)
+	action_status.add_theme_color_override("font_color", Color("#ffe0a0"))
+	objective_hint.text = message
 
 func _refresh_ui() -> void:
 	if not is_node_ready():

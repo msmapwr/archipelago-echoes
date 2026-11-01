@@ -122,7 +122,7 @@ func _ready() -> void:
 	var time_row := HBoxContainer.new()
 	controls.add_child(time_row)
 	pause_button = _button(time_row, "暂停", toggle_pause)
-	scale_button = _button(time_row, "时间 ×1", func() -> void: time_scale = 10.0 if time_scale == 1.0 else 1.0; _refresh())
+	scale_button = _button(time_row, "时间 ×1", func() -> void: time_scale = 10.0 if time_scale == 1.0 else 50.0 if time_scale == 10.0 else 1.0; _refresh())
 	feedback = Label.new()
 	feedback.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	feedback.add_theme_color_override("font_color", Color("#e8b968"))

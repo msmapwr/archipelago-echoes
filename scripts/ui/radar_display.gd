@@ -139,6 +139,10 @@ func _on_event_recorded(event: Dictionary) -> void:
 func _capture_echo(id: String) -> void:
 	if id != MissionController.CONTACT_ID:
 		return
+	# Refresh stationary observations instead of layering identical phosphor spots.
+	for index in range(_echoes.size() - 1, -1, -1):
+		if _echoes[index].position_km.distance_to(MissionController.last_contact_position_km) < 0.05:
+			_echoes.remove_at(index)
 	_echoes.append({
 		"position_km": MissionController.last_contact_position_km,
 		"time": WorldClock.elapsed_seconds,

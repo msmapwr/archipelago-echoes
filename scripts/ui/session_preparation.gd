@@ -100,6 +100,12 @@ func _ready() -> void:
 	menu_button.text = "返回主菜单"
 	menu_button.pressed.connect(func() -> void: menu_requested.emit())
 	actions.add_child(menu_button)
+	var back := Button.new()
+	back.text = "上一页"
+	back.pressed.connect(func() -> void:
+		page_index = maxi(0, page_index - 1)
+		_refresh_page())
+	actions.add_child(back)
 	replay_tutorial_button = Button.new()
 	replay_tutorial_button.text = "重播新手教程"
 	replay_tutorial_button.pressed.connect(replay_tutorial)

@@ -88,6 +88,17 @@ func _ready() -> void:
 	replay_button.text = "重播训练"
 	replay_button.pressed.connect(replay)
 	navigation.add_child(replay_button)
+	var previous := Button.new()
+	previous.text = "上一课"
+	previous.pressed.connect(func() -> void:
+		var target: int = maxi(0, simulation.step - 1)
+		# Replay the prerequisite rehearsal state, never touch live mission resources.
+		simulation.step = target
+		simulation.skipped = false
+		simulation.paused = false
+		_refresh()
+		readiness_changed.emit())
+	navigation.add_child(previous)
 	_refresh()
 
 func _label(parent: Node, caption: String, font_size: int) -> Label:

@@ -2,8 +2,8 @@ shader_type canvas_item;
 
 // Character CRT glass: restrained line structure and edge falloff.
 // The radar PPI draws its own phosphor response and does not use an RGB mask.
-uniform float line_strength : hint_range(0.0, 0.03) = 0.004;
-uniform float edge_strength : hint_range(0.0, 0.2) = 0.08;
+uniform float line_strength : hint_range(0.0, 0.03) = 0.001;
+uniform float edge_strength : hint_range(0.0, 0.2) = 0.04;
 uniform vec2 screen_size = vec2(1200.0, 636.0);
 uniform float corner_radius = 22.0;
 // 0: monochrome PPI, 1: character terminal, 2: color archive monitor.

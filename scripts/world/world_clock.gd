@@ -12,7 +12,7 @@ func _physics_process(delta: float) -> void:
 	advance(delta * time_scale)
 
 func set_time_scale(value: float) -> bool:
-	if value != 1.0 and value != 10.0:
+	if value not in [1.0, 10.0, 50.0]:
 		return false
 	time_scale = value
 	DebugLog.write("info", "time_scale_changed", {"time_scale": value}, true)
