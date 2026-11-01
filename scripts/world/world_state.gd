@@ -41,7 +41,8 @@ func _ready() -> void:
 	load_first_scenario()
 
 func load_first_scenario(map_seed: int = FIRST_SCENARIO_SEED) -> bool:
-	generation_error = ""
+	generation_error = DataManager.startup_error()
+	if not generation_error.is_empty(): return false
 	if map_seed < 0 or map_seed > 2147483647:
 		generation_error = "海域种子必须在 0–2147483647 之间。"
 		DebugLog.write("warning", "generation_rejected", {"seed": map_seed, "reason": generation_error}, true)

@@ -24,20 +24,32 @@ var errors: PackedStringArray = []
 func _ready() -> void:
 	reload()
 
-func reload() -> bool:
-	definitions.clear()
+func reload(paths: PackedStringArray = DEFINITION_PATHS) -> bool:
+	var previous := definitions
+	definitions = {}
 	errors.clear()
-	for path in DEFINITION_PATHS:
-		var resource := ResourceLoader.load(path)
+	for path in paths:
+		if not ResourceLoader.exists(path):
+			errors.append("%s: missing resource" % path)
+			continue
+		var resource := ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE)
 		if resource == null:
 			errors.append("%s: cannot load resource" % path)
 			continue
 		register_definition(resource, path)
 	validate_catalog()
+	if not errors.is_empty(): definitions = previous
 	for error in errors:
 		DebugLog.write("error", "data_validation_error", {"reason": error})
-		push_error("[DataManager] " + error)
+		push_warning("[DataManager] " + error)
 	return errors.is_empty()
+
+func startup_error() -> String:
+	if not errors.is_empty(): return "\n".join(errors)
+	var required := {"ship.haven":ShipDefinition, "aircraft.kestrel":AircraftDefinition, "contact.alpha":ContactDefinition, "task.first_recon":TaskDefinition, "weapon.deck_gun":WeaponDefinition, "ammo.ap":AmmunitionDefinition, "ammo.sap":AmmunitionDefinition, "ammo.he":AmmunitionDefinition}
+	for id in required:
+		if not is_instance_of(definitions.get(id), required[id]): return "缺失或类型错误的启动资源：" + id
+	return ""
 
 func validate_catalog() -> bool:
 	var symbol_owners: Dictionary = {}

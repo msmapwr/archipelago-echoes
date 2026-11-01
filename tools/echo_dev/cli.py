@@ -9,10 +9,11 @@ import re
 import subprocess
 import sys
 
+from .foundation import copy_source, export_windows
 from .analysis import bundle, filtered, native_diagnostics, read_logs, state_diff, summarize
 from .runner import discover_tests, execute, find_godot, godot_arguments, new_run, save_json, select_tests, PASS_MARKER
 
-CAPTURE_MODES = ("menu", "preparation", "settings", "generation", "tutorial", "background", "harbor", "harbor-east", "game", "chart-wide", "chart-stale", "chart-silent", "ship-route", "ship-route-arrived", "ship-route-queue", "ship-route-queue-mid", "shoal-warning", "grounding", "wreck", "harbor-impact", "damage", "archive", "fire-control", "fire-archive", "lead-control", "lead-archive", "projectile", "splash", "splash-archive", "lock-control", "ammo-impact", "groups-control", "groups-archive", "enemy-withdrawal", "library", "guide-return", "sortie", "flight-nav")
+CAPTURE_MODES = ("menu", "startup-error", "preparation", "settings", "generation", "tutorial", "background", "harbor", "harbor-east", "game", "chart-wide", "chart-stale", "chart-silent", "ship-route", "ship-route-arrived", "ship-route-queue", "ship-route-queue-mid", "shoal-warning", "grounding", "wreck", "harbor-impact", "damage", "archive", "fire-control", "fire-archive", "lead-control", "lead-archive", "projectile", "splash", "splash-archive", "lock-control", "ammo-impact", "groups-control", "groups-archive", "enemy-withdrawal", "library", "guide-return", "sortie", "flight-nav")
 
 
 def positive(value: str) -> float:
@@ -40,6 +41,8 @@ def parser() -> argparse.ArgumentParser:
     commands.add_parser("doctor", help="检查 Godot、项目与测试目录")
     commands.add_parser("list-tests", help="列出可执行 smoke 测试")
     commands.add_parser("import", help="导入资源并检查脚本")
+    commands.add_parser("export-windows", help="导出 Windows release、检查包内容并运行安装诊断")
+    commands.add_parser("m0", help="无缓存源码副本 → 全量回归 → 图形基础回归 → 导出包 → 缺失资源恢复")
     for name in ("test", "check"):
         command = commands.add_parser(name, help="运行测试" if name == "test" else "Python 工具测试 → 导入 → Godot 回归")
         command.add_argument("--suite", choices=("all", "p2"), default="all")
@@ -169,6 +172,42 @@ def main(arguments: list[str] | None = None) -> int:
         print("诊断目录：" + str(run), flush=True)
         results = []
         diagnostic_env = {"ECHO_DEBUG_LEVEL": args.debug_level, "ECHO_DEBUG_MAX_MB": str(args.log_budget_mb)}
+        if args.command in ("export-windows", "m0"):
+            target = project
+            if args.command == "m0":
+                target = run / "clean-source"
+                copy_source(project, target)
+                for mode, flags in [("check", []), ("test", ["--graphics", "--case", "m0_foundation", "--case", "menu_ui", "--case", "m1_ui", "--case", "radar_visual", "--case", "mission_guidance"])]:
+                    folder = run / ("clean-" + mode)
+                    result = execute([sys.executable, str(target / "tools/dev.py"), "--project", str(target), "--godot", str(binary), "--output", str(folder), mode, *flags], target, folder / "driver", timeout=300, environment=diagnostic_env)
+                    results.append(result)
+                    report("clean " + mode, result)
+                    if not result["passed"]: break
+            elif not import_project(binary, target, run, environment=diagnostic_env)["passed"]:
+                return 1
+            package = {"passed":False}
+            if all(result["passed"] for result in results):
+                package = export_windows(binary, target, run / "export")
+                print("Windows export " + ("PASS" if package["passed"] else "FAIL"), flush=True)
+            if args.command == "m0" and package["passed"]:
+                fault = run / "fault-source"
+                copy_source(project, fault)
+                resource = fault / "data/ships/escort_carrier.tres"
+                repair = run / "escort_carrier-repair.tres"
+                repair.write_bytes(resource.read_bytes())
+                resource.unlink()
+                result = import_project(binary, fault, run / "fault", environment=diagnostic_env)
+                results.append(result)
+                if result["passed"]:
+                    folder = run / "fault" / "recovery"
+                    result = execute(godot_arguments(binary, fault, folder, ["--headless", "--script", "res://tests/m0_boot_probe.gd"]), fault, folder, timeout=45, marker=re.compile("M0 boot recovery probe passed"), environment={**diagnostic_env, "M0_REPAIR_RESOURCE":str(repair.resolve())})
+                    results.append(result)
+                    report("fault recovery", result)
+            passed = package["passed"] and all(result["passed"] for result in results)
+            save_json(run / "summary.json", {"passed":passed, "results":results, "export_report":str(run / "export/summary.json")})
+            print("报告：" + str(run / "summary.json"))
+            return 0 if passed else 1
+
         if args.command == "check":
             folder = run / "python-tests"
             result = execute([sys.executable, "-m", "unittest", "discover", "-s", str(project / "tools/tests"), "-v"], project, folder, timeout=args.timeout, environment={"PYTHONPATH": str(project / "tools")}, marker=re.compile(r"\bOK\b"))

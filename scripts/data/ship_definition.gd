@@ -4,8 +4,8 @@ class_name ShipDefinition
 @export var max_speed_knots: float = 20.0
 @export var armor_mm: float = 70.0
 @export_range(0.5, 20.0) var draft_m: float = 4.0
-@export var aircraft_ids: PackedStringArray = []
-@export var weapon_ids: PackedStringArray = []
+@export var aircraft_ids: PackedStringArray = PackedStringArray()
+@export var weapon_ids: PackedStringArray = PackedStringArray()
 @export var weapon_mounts: Array[WeaponMountDefinition] = []
 @export var ship_kind: String = "escort_carrier"
 @export var size_class: String = "medium"

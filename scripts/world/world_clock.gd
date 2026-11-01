@@ -19,7 +19,7 @@ func set_time_scale(value: float) -> bool:
 	return true
 
 func advance(delta: float) -> bool:
-	if get_tree().paused or delta <= 0.0:
+	if get_tree().paused or not is_finite(delta) or delta <= 0.0:
 		return false
 	elapsed_seconds += delta
 	time_advanced.emit(elapsed_seconds)

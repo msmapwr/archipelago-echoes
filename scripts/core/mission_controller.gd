@@ -90,6 +90,7 @@ var _navigation_arrived: bool = false
 var _fuel_warning_level: int = 0
 var airfield_position_km: Vector2 = Vector2.ZERO
 
+var initialization_error: String = ""
 var last_message: String = "系统待命"
 var ship_loss_cause: String = ""
 var _last_clock_seconds: float = 0.0
@@ -101,16 +102,26 @@ func _ready() -> void:
 	EventBus.event_recorded.connect(_on_fire_control_event)
 	_initialize_scenario()
 
-func restart_scenario() -> void:
+func restart_scenario() -> bool:
+	initialization_error = DataManager.startup_error()
+	if not initialization_error.is_empty(): return false
 	EventBus.history.clear()
 	WorldClock.reset()
 	GameManager.reset_for_new_scenario()
 	WorldClock.set_time_scale(1.0)
-	WorldState.load_first_scenario(WorldState.scenario_seed)
-	_initialize_scenario()
+	if not WorldState.load_first_scenario(WorldState.scenario_seed):
+		initialization_error = WorldState.generation_error
+		return false
+	if not _initialize_scenario(): return false
 	scan()
+	return true
 
-func _initialize_scenario() -> void:
+func _initialize_scenario() -> bool:
+	initialization_error = DataManager.startup_error()
+	if initialization_error.is_empty() and WorldState.map == null: initialization_error = "海域初始化失败：" + WorldState.generation_error
+	if not initialization_error.is_empty():
+		DebugLog.write("error", "initialization_blocked", {"reason":initialization_error})
+		return false
 	var ship := DataManager.get_definition(SHIP_ID) as ShipDefinition
 	_gun_mounts = ship.weapon_mounts.duplicate()
 	if _gun_mounts.is_empty(): _gun_mounts.append(WeaponMountDefinition.new())
@@ -176,6 +187,7 @@ func _initialize_scenario() -> void:
 	_last_clock_seconds = WorldClock.elapsed_seconds
 	last_message = "搜索海峡接触，确认目标后安全返航"
 	state_changed.emit()
+	return true
 
 func scan() -> bool:
 	if not _action_allowed():
@@ -877,7 +889,7 @@ func _on_world_time_advanced(total_seconds: float) -> void:
 	var observer_origin := _last_tick_ship_position
 	_last_tick_ship_position = WorldState.ship_position_km
 	_last_clock_seconds = total_seconds
-	if delta <= 0.0 or GameManager.mode == "settlement" or GameManager.mode == "campaign_failed":
+	if not initialization_error.is_empty() or delta <= 0.0 or GameManager.mode == "settlement" or GameManager.mode == "campaign_failed":
 		return
 	_advance_gun_projectiles(delta, total_seconds, observer_origin)
 	_advance_fire_control_lock(delta)
@@ -1061,6 +1073,7 @@ func _accept(message: String) -> bool:
 	return true
 
 func _action_allowed() -> bool:
+	if not initialization_error.is_empty(): return _reject("初始化未完成：" + initialization_error)
 	if not GameManager.player_alive or GameManager.mode in ["settlement", "campaign_failed"]:
 		return _reject("行动已结束，无法下达该命令")
 	if get_tree().paused:

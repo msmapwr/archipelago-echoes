@@ -27,6 +27,7 @@ const RED := Color("#d86d5d")
 @onready var menu_status: Label = $MenuCRT/MenuStatus
 @onready var self_test: Label = $MenuCRT/SelfTest
 
+var startup_failure: String = ""
 var started: bool = false
 var session_stage: String = "menu"
 var _displayed_second: int = -1
@@ -59,6 +60,45 @@ func _ready() -> void:
 	EventBus.mode_changed.connect(func(_previous: String, _current: String) -> void: _refresh_status())
 	WorldState.ship_command_changed.connect(func(_heading: float, _speed: float) -> void: _refresh_status())
 	_refresh_status()
+	_check_startup()
+	if "--verify-install" in OS.get_cmdline_user_args(): call_deferred("_verify_install")
+
+func _check_startup() -> bool:
+	startup_failure = DataManager.startup_error()
+	if startup_failure.is_empty(): startup_failure = MissionController.initialization_error
+	if startup_failure.is_empty() and WorldState.map == null: startup_failure = "海域尚未初始化"
+	if startup_failure.is_empty(): return true
+	get_tree().paused = true
+	menu_crt.modulate.a = 1
+	start_button.text = "重试初始化"
+	start_caption.text = "SYSTEM / FAULT"
+	menu_status.text = "SYSTEM / 启动失败 · 任务保持停止"
+	self_test.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	self_test.text = startup_failure.split("\n")[0].left(90) + "\n任务保持停止。修复游戏文件后重试。\n完整原因见诊断日志。"
+	self_test.tooltip_text = startup_failure
+	top_message.text = "初始化失败 / 请检查资源或重新解压游戏"
+	return false
+
+func _retry_startup() -> void:
+	if DataManager.reload(): MissionController.restart_scenario()
+	get_tree().paused = true
+	if _check_startup():
+		start_button.text = "开始游戏"
+		start_caption.text = "SYSTEM / STANDBY"
+		self_test.autowrap_mode = TextServer.AUTOWRAP_OFF
+		self_test.tooltip_text = ""
+		_boot_seconds = 0
+		_boot_phase = -1
+		_refresh_status()
+
+func _verify_install() -> void:
+	for frame in range(3): await get_tree().process_frame
+	if DisplayServer.get_name() != "headless": await RenderingServer.frame_post_draw
+	var errors: PackedStringArray = preload("res://scripts/core/install_verification.gd").validate(self)
+	if errors.is_empty(): print("Installation verification passed")
+	else:
+		for error in errors: printerr("FAIL: " + error)
+	get_tree().quit(0 if errors.is_empty() else 1)
 
 func _style_start_button() -> void:
 	start_button.add_theme_stylebox_override("normal", _button_style(Color("#642c29"), Color("#f3a784")))
@@ -87,6 +127,7 @@ func _button_style(fill: Color, border: Color) -> StyleBoxFlat:
 	return style
 
 func _process(delta: float) -> void:
+	if not startup_failure.is_empty(): return
 	if session_stage == "harbor_navigation":
 		var harbor: Control = game_crt_slot.get_node("Harbor")
 		var second := floori(harbor.navigation.elapsed_seconds)
@@ -114,6 +155,10 @@ func _process(delta: float) -> void:
 	menu_status.text = "SYSTEM 07  /  高压启动中                                        SELF TEST / RUNNING" if phase < 4 else "SYSTEM 07  /  作战情报中心                                         SELF TEST / COMPLETE"
 
 func _start_game() -> void:
+	if not startup_failure.is_empty():
+		_retry_startup()
+		return
+	if not _check_startup(): return
 	if session_stage != "menu":
 		return
 	menu_crt.hide()

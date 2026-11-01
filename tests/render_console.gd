@@ -15,6 +15,9 @@ func _capture() -> void:
 	var shell: Control = load("res://scenes/main/console_shell.tscn").instantiate()
 	root.add_child(shell)
 	var capture_mode := OS.get_environment("CONSOLE_CAPTURE_MODE")
+	if capture_mode == "startup-error":
+		root.get_node("DataManager").errors.append("res://data/ships/escort_carrier.tres: missing resource")
+		shell._check_startup()
 	if capture_mode in ["preparation", "settings", "generation", "tutorial", "background"]:
 		shell.get_node("StartButton").emit_signal("pressed")
 		var count := 1 if capture_mode == "settings" else 5 if capture_mode == "generation" else 3 if capture_mode == "tutorial" else 2 if capture_mode == "background" else 4

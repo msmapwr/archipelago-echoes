@@ -1,5 +1,7 @@
 # 群岛回波 / Echoes of the Archipelago
 
+M0 基础阶段已验收，见 [报告](docs/m0-acceptance.md)。运行 `python tools/dev.py m0` 进行无缓存完整基础验收，`python tools/dev.py export-windows` 导出并验证 Windows 开发包；需匹配的 Godot 4.7.2 Windows release 模板。详见 [基础接口与构建说明](docs/m0-foundation.md)。
+
 使用 Godot 4.7.2 开发的海空战术游戏原型。主场景是 16:9 的舰桥作战情报中心：中央是单色雷达与字符 CRT，旁边有机械仪表、彩色档案监视器和纸质航海图。菜单经过短暂的设备自检后，仅提供“开始游戏”按钮；点击后依次进入准备流程和港口驾驶，驶离港口后由首关战术终端接管中央 CRT，可搜索接触、识别或交火、驾驶侦察机、返航并结算。布局参考 [UI SVG 草图](docs/reference/ui_wireframe_redraw.svg)，视觉规则见 [游戏美学计划](docs/archipelago_echoes_aesthetic_plan.md)，阶段与后续工作见 [详细开发计划](docs/development-plan.md)。
 
 ## 运行与首关操作
