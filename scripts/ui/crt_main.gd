@@ -34,6 +34,9 @@ var clear_target_button: Button
 @onready var time_status: Label = terminal.get_node("Footer/TimeStatus")
 @onready var radar_range_button: Button = terminal.get_node("Footer/RadarRange")
 
+var _feedback_message: String = ""
+var _feedback_until_msec: int = 0
+
 var selected_contact_id: String = ""
 var aim_mode_button: Button
 var lock_button: Button
@@ -326,15 +329,24 @@ func guidance_state() -> Dictionary:
 	state.ship_route_status = WorldState.ship_waypoint_status
 	return state
 
+func _process(_delta: float) -> void:
+	# Real time keeps the receipt readable at x50 and expires it while paused.
+	if not _feedback_message.is_empty() and Time.get_ticks_msec() >= _feedback_until_msec:
+		_feedback_message = ""
+		_refresh_guidance()
+
 func _refresh_guidance() -> void:
 	guidance = Guidance.project(guidance_state())
 	objective_title.text = "当前目标 / " + guidance.title
 	objective_hint.text = guidance.next
 	if not guidance.warning.is_empty():
 		objective_hint.text = guidance.warning
-	objective_hint.tooltip_text = guidance.next + "\n" + guidance.fire_control_hint
+	if guidance.warning.is_empty() and GameManager.mode not in ["campaign_failed", "settlement"] and Time.get_ticks_msec() < _feedback_until_msec:
+		objective_hint.text = "操作回执 / " + _feedback_message
+		objective_hint.add_theme_color_override("font_color", Color("#ffe0a0"))
+	objective_hint.tooltip_text = objective_hint.text + "\n" + guidance.next + "\n" + guidance.fire_control_hint
 	objective_hint.add_theme_font_size_override("font_size", 17)
-	objective_hint.add_theme_color_override("font_color", Color("#e8b968") if not guidance.warning.is_empty() else Color("#a2c0a9"))
+	objective_hint.add_theme_color_override("font_color", Color("#e8b968") if not guidance.warning.is_empty() or Time.get_ticks_msec() < _feedback_until_msec else Color("#a2c0a9"))
 
 func toggle_archive() -> void:
 	if unit_library != null and unit_library.visible:
@@ -572,6 +584,8 @@ func _on_scan_pressed() -> void:
 		_next_auto_scan_seconds = WorldClock.elapsed_seconds + 30.0
 
 func _on_restart_pressed() -> void:
+	_feedback_until_msec = 0
+	_feedback_message = ""
 	if archive.visible:
 		close_archive(false)
 	selected_contact_id = ""
@@ -604,7 +618,9 @@ func _on_feedback_changed(message: String) -> void:
 	action_status.tooltip_text = message
 	action_status.add_theme_font_size_override("font_size", 19)
 	action_status.add_theme_color_override("font_color", Color("#ffe0a0"))
-	objective_hint.text = message
+	_feedback_message = message
+	_feedback_until_msec = Time.get_ticks_msec() + 10000
+	_refresh_guidance()
 
 func _refresh_ui() -> void:
 	if not is_node_ready():

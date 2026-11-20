@@ -25,6 +25,22 @@ var flight: String = "deck"
 var skipped: bool = false
 var message: String = "训练链路在线。正式关卡时间与资源保持冻结。"
 
+func previous_lesson() -> void:
+	# Restore only the prerequisites of the destination lesson.
+	step = maxi(0, mini(step, LESSONS.size()) - 1)
+	scans = 0 if step == 0 else 1 if step < 3 else 2
+	echo_age = 0.0
+	selected = step >= 2
+	identified = step >= 3
+	fired = step >= 4
+	heading_degrees = 15.0 if step >= 5 else 0.0
+	speed_knots = 6.0 if step >= 5 else 0.0
+	paused = false
+	practiced_pause = step >= 6
+	flight = "deck"
+	skipped = false
+	message = "已返回上一课，请重新完成本课操作。"
+
 func ready_to_continue() -> bool:
 	return skipped or step == LESSONS.size()
 

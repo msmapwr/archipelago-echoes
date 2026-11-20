@@ -44,6 +44,13 @@ func _run() -> void:
 	model.act("return")
 	model.act("land")
 	_check(model.ready_to_continue() and model.flight == "recovered" and not model.skipped, "all seven lessons complete through valid operations")
+	for destination in range(6, -1, -1):
+		model.previous_lesson()
+		_check(model.step == destination and not model.ready_to_continue() and not model.paused and model.flight == "deck", "previous lesson restores active rehearsal")
+		_check(model.selected == (destination >= 2) and model.identified == (destination >= 3) and model.fired == (destination >= 4), "previous lesson restores prerequisite flags")
+	_check(model.scans == 0 and model.speed_knots == 0 and model.heading_degrees == 0, "return to first lesson clears echoes and helm")
+	model.previous_lesson()
+	_check(model.step == 0, "previous at first lesson stays at zero")
 	var shell: Control = load("res://scenes/main/console_shell.tscn").instantiate()
 	root.add_child(shell)
 	shell.get_node("StartButton").emit_signal("pressed")

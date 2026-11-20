@@ -91,11 +91,7 @@ func _ready() -> void:
 	var previous := Button.new()
 	previous.text = "上一课"
 	previous.pressed.connect(func() -> void:
-		var target: int = maxi(0, simulation.step - 1)
-		# Replay the prerequisite rehearsal state, never touch live mission resources.
-		simulation.step = target
-		simulation.skipped = false
-		simulation.paused = false
+		simulation.previous_lesson()
 		_refresh()
 		readiness_changed.emit())
 	navigation.add_child(previous)
