@@ -49,6 +49,27 @@ func _run() -> void:
 	_check(mission.start_damage_control())
 	clock.advance(10.0)
 	_check(not game.ship_afloat and mission.ship_health == 0.0 and mission.repair_seconds_remaining == 0.0, "lethal incoming fire cancels repair instead of resurrecting hull")
+	mission.restart_scenario()
+	mission.enemy_tracking_ship = true
+	world.ship_position_km = world.contact_position_km + Vector2(0, 1)
+	mission._enemy_attack(100)
+	mission._enemy_attack(145)
+	_check(mission.damaged_gun_mounts.size() == 1, "second incoming hit disables one mount")
+	var damaged: String = mission.damaged_gun_mounts[0]
+	mission.select_gun_group(damaged)
+	_check("受损" in mission.ship_gun_block_reason(), "damaged mount rejects fire")
+	var ammunition_before: int = mission.ship_ammo
+	var reload_before: float = mission.next_ship_fire_seconds
+	mission.select_gun_group("aft")
+	_check("受损" not in mission.ship_gun_block_reason(), "other mount remains operational")
+	mission.select_gun_group(damaged)
+	world.set_ship_command(0, 0)
+	_check(mission.start_damage_control() and mission.repair_mount_id == damaged, "repair prioritizes selected damaged mount")
+	mission.enemy_alive = false
+	clock.advance(30)
+	_check(mission.damaged_gun_mounts.is_empty() and mission.ship_ammo == ammunition_before and mission.next_ship_fire_seconds == reload_before, "repair restores mount without replenishing ammunition or resetting reload")
+	mission.restart_scenario()
+	_check(mission.damaged_gun_mounts.is_empty() and mission.repair_mount_id.is_empty(), "restart clears subsystem damage")
 	if failures.is_empty():
 		print("Damage control smoke test passed")
 		quit(0)

@@ -87,6 +87,9 @@ func assignment_lifecycle() -> void:
 
 func observation_and_resource_gates() -> void:
 	in_range()
+	# Isolate observation/reload boundaries from incoming subsystem damage.
+	# Enemy damage and mount restoration are exercised by damage_control_smoke.
+	mission.next_enemy_fire_seconds = INF
 	check(mission.assign_fire_control_target(mission.CONTACT_ID), "in-range assignment accepted")
 	var order: String = mission.fire_control_order_id
 	check(not mission.fire_ship_gun("bogus") and mission.ship_ammo == 6 and mission.fire_control_order_id == order, "mismatched request preserves order and ammunition")

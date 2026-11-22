@@ -645,6 +645,7 @@ func _draw_gun_arc(center: Vector2, radius: float) -> void:
 		var selected: bool = group.mount_id == MissionController.selected_mount_id
 		var origin: Vector2 = center + (group.origin_km - own_position_km) * radius / display_range_km
 		var reach := radius * minf(float(group.range_km) / display_range_km, 1.0)
+		if group.get("damaged", false): continue
 		var start := deg_to_rad(float(group.heading) - float(group.half_arc) - 90)
 		var end := deg_to_rad(float(group.heading) + float(group.half_arc) - 90)
 		var tint := PHOSPHOR if selected and gun_ready else AMBER if selected else GRID

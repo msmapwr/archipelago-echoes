@@ -60,6 +60,9 @@ var next_ship_fire_seconds: float:
 var fire_control_target_id: String = ""
 var fire_control_order_id: String = ""
 var _fire_control_sequence: int = 0
+var damaged_gun_mounts: Array[String] = []
+var repair_mount_id := ""
+var _incoming_hits := 0
 var repair_teams: int = 2
 var repair_seconds_remaining: float = 0.0
 var enemy_health: float = 100.0
@@ -153,6 +156,9 @@ func _initialize_scenario() -> bool:
 	fire_control_target_id = ""
 	fire_control_order_id = ""
 	_fire_control_sequence = 0
+	damaged_gun_mounts.clear()
+	repair_mount_id = ""
+	_incoming_hits = 0
 	repair_teams = 2
 	repair_seconds_remaining = 0.0
 	enemy_health = 100.0
@@ -384,7 +390,7 @@ func gun_center_heading_degrees() -> float:
 func gun_groups() -> Array[Dictionary]:
 	var groups: Array[Dictionary] = []
 	for mount in _gun_mounts:
-		groups.append({"mount_id": mount.mount_id, "label": mount.display_name, "origin_km": WorldState.ship_position_km + mount.local_position_km.rotated(deg_to_rad(WorldState.ship_heading_degrees)), "heading": wrapf(WorldState.ship_heading_degrees + mount.relative_heading_degrees, 0, 360), "half_arc": mount.half_arc_degrees, "range_km": (DataManager.get_definition(mount.weapon_id) as WeaponDefinition).range_km, "ammo": _gun_states[mount.mount_id].ammo, "reload_remaining": maxf(0, _gun_states[mount.mount_id].reload - WorldClock.elapsed_seconds), "ammunition_id": _gun_states[mount.mount_id].ammunition})
+		groups.append({"mount_id": mount.mount_id, "label": mount.display_name, "origin_km": WorldState.ship_position_km + mount.local_position_km.rotated(deg_to_rad(WorldState.ship_heading_degrees)), "heading": wrapf(WorldState.ship_heading_degrees + mount.relative_heading_degrees, 0, 360), "half_arc": mount.half_arc_degrees, "range_km": (DataManager.get_definition(mount.weapon_id) as WeaponDefinition).range_km, "damaged": mount.mount_id in damaged_gun_mounts, "ammo": _gun_states[mount.mount_id].ammo, "reload_remaining": maxf(0, _gun_states[mount.mount_id].reload - WorldClock.elapsed_seconds), "ammunition_id": _gun_states[mount.mount_id].ammunition})
 	return groups
 
 func total_ship_ammo() -> int:
@@ -410,6 +416,8 @@ func ship_gun_block_reason(contact_id: String = "") -> String:
 		return "甲板炮仅可在舰桥指挥"
 	if get_tree().paused:
 		return "模拟暂停，无法开火"
+	if selected_mount_id in damaged_gun_mounts:
+		return "当前炮组受损，请切换炮组或低速投入损管"
 	if not radar_emitting:
 		return "雷达静默中，火控无法跟踪接触"
 	if not GameManager.target_identified:
@@ -596,15 +604,16 @@ func start_damage_control() -> bool:
 		return _reject("模拟暂停，无法投入损管队")
 	if repair_seconds_remaining > 0.0:
 		return _reject("损管作业已经进行中")
-	if ship_health >= 100.0:
+	if ship_health >= 100.0 and damaged_gun_mounts.is_empty():
 		return _reject("舰体完好，无需损管")
 	if repair_teams <= 0:
 		return _reject("本关损管队已耗尽")
 	if WorldState.ship_speed_knots > 12.0:
 		return _reject("请减速至不超过 12 kn 再投入损管队")
+	repair_mount_id = selected_mount_id if selected_mount_id in damaged_gun_mounts else damaged_gun_mounts[0] if not damaged_gun_mounts.is_empty() else ""
 	repair_teams -= 1
 	repair_seconds_remaining = REPAIR_SECONDS
-	EventBus.record("damage_control_started", {"teams_remaining": repair_teams, "duration": REPAIR_SECONDS})
+	EventBus.record("damage_control_started", {"teams_remaining": repair_teams, "duration": REPAIR_SECONDS, "mount_id": repair_mount_id})
 	state_changed.emit()
 	return _accept("损管队已投入：30 秒内甲板炮停用，母舰仍可能遭受攻击")
 
@@ -618,8 +627,12 @@ func _advance_damage_control(delta: float) -> void:
 	repair_seconds_remaining = maxf(0.0, repair_seconds_remaining - delta)
 	if repair_seconds_remaining == 0.0:
 		ship_health = minf(100.0, ship_health + REPAIR_AMOUNT)
+		if not repair_mount_id.is_empty():
+			damaged_gun_mounts.erase(repair_mount_id)
+			EventBus.record("gun_mount_repaired", {"mount_id": repair_mount_id})
+		repair_mount_id = ""
 		EventBus.record("damage_control_completed", {"health": ship_health})
-		_feedback("损管完成：舰体 %.0f%%，甲板炮恢复可用" % ship_health)
+		_feedback("损管完成：舰体 %.0f%%，仍有 %d 个受损炮组" % [ship_health, damaged_gun_mounts.size()])
 
 func prepare_sortie() -> bool:
 	if not _action_allowed():
@@ -934,6 +947,14 @@ func _enemy_attack(total_seconds: float) -> void:
 		return
 	next_enemy_fire_seconds = total_seconds + 45.0
 	ship_health = maxf(0.0, ship_health - ENEMY_DAMAGE)
+	_incoming_hits += 1
+	if _incoming_hits % 2 == 0 and ship_health > 0:
+		for mount in _gun_mounts:
+			if mount.mount_id not in damaged_gun_mounts:
+				damaged_gun_mounts.append(mount.mount_id)
+				if selected_mount_id == mount.mount_id: _release_fire_control_lock("炮组受损")
+				EventBus.record("gun_mount_damaged", {"mount_id": mount.mount_id, "source": CONTACT_ID})
+				break
 	EventBus.damage_reported.emit(SHIP_ID)
 	EventBus.record("ship_damaged", {"health": ship_health, "source": CONTACT_ID})
 	_feedback("母舰遭到还击，舰体 %.0f%%" % ship_health)

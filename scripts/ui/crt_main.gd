@@ -825,11 +825,14 @@ func _refresh_ship() -> void:
 	ship_details.text = "航向 %03d°   航速 %.0f / %.0f kn   舰体 %.0f%%\n位置 E %05.1f / S %05.1f km   弹药 %d" % [roundi(WorldState.ship_heading_degrees), WorldState.ship_speed_knots, WorldState.ship_max_speed_knots, MissionController.ship_health, WorldState.ship_position_km.x, WorldState.ship_position_km.y, MissionController.total_ship_ammo()]
 	radar.set_ship_heading(WorldState.ship_heading_degrees)
 	var repairing := MissionController.repair_seconds_remaining > 0.0
-	ship_controls.get_node("DamageControl").visible = MissionController.ship_health < 100.0 or repairing
+	ship_controls.get_node("DamageControl").visible = MissionController.ship_health < 100.0 or repairing or not MissionController.damaged_gun_mounts.is_empty()
 	ship_controls.get_node("DamageControl/Status").text = "损管 / %.0f 秒 · 余 %d 组" % [ceilf(MissionController.repair_seconds_remaining), MissionController.repair_teams] if repairing else "损管 / 余 %d 组待命" % MissionController.repair_teams
 	if not repairing and MissionController.repair_teams == 0:
 		ship_controls.get_node("DamageControl/Status").text = "损管 / 本关资源已耗尽"
 	_button("ShipControls/DamageControl/Repair").disabled = repairing or MissionController.repair_teams == 0 or get_tree().paused or GameManager.mode != "bridge"
+
+	if not MissionController.damaged_gun_mounts.is_empty():
+		ship_controls.get_node("DamageControl/Status").text += " · 受损炮组 " + ", ".join(MissionController.damaged_gun_mounts)
 
 func _refresh_flight() -> void:
 	var contact_distance := MissionController.aircraft_position_km.distance_to(WorldState.contact_position_km)
@@ -919,6 +922,8 @@ func _event_line(event: Dictionary) -> String:
 		"aircraft_attack": return "飞机对海攻击 A1"
 		"enemy_damaged": return "战斗结果尚未观测" if details_data.get("source", "") == "deck_gun_unobserved" else "A1 受损 %.0f%%" % (100.0 - details_data.get("health", 100.0))
 		"ship_damaged": return "母舰受损 · 舰体 %.0f%%" % details_data.get("health", 0.0)
+		"gun_mount_damaged": return "炮组受损 / " + str(details_data.get("mount_id", "")) + " · 切换炮组或低速损管"
+		"gun_mount_repaired": return "炮组修复 / " + str(details_data.get("mount_id", ""))
 		"damage_control_started": return "损管队投入 · 甲板炮停用 30 秒"
 		"damage_control_completed": return "损管完成 · 舰体 %.0f%%" % details_data.get("health", 0.0)
 		"damage_control_aborted": return "母舰沉没，损管终止"
